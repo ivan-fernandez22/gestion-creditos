@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capital Plus - Ingreso</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root { --oro: #c5a043; }
+        .text-oro { color: var(--oro); }
+        .bg-oro { background-color: var(--oro); }
+        body { background-color: #f7f7f7; }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center p-6">
+
+    <div class="max-w-md w-full">
+        <div class="text-center mb-10">
+            <div class="w-24 h-24 mx-auto mb-4 flex items-center justify-center">
+                <img src="./img/WhatsApp Image 2026-04-10 at 18.36.55.jpeg" alt="Capital Plus Logo" class="w-full h-full object-contain">
+            </div>
+            <h1 class="text-4xl  font-black text-slate-800 tracking-tight">Capital <span class="text-oro">Plus</span></h1>
+            <p class="text-slate-400 font-medium mt-1 uppercase text-xs tracking-widest">Acceso Administrativo</p>
+        </div>
+
+        <div class="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+            <form id="form-login" class="space-y-5">
+                <div>
+                    <label class="block text-[15px] uppercase font-bold text-slate-400 mb-2 ml-1">Usuario</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
+                            <i data-lucide="user" class="w-5 h-5"></i>
+                        </span>
+                        <input type="text" id="user" placeholder="Nombre de usuario" class="w-full pl-11 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-oro/50 transition-all" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[15px] uppercase font-bold text-slate-400 mb-2 ml-1">Contraseña</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
+                            <i data-lucide="lock" class="w-5 h-5"></i>
+                        </span>
+                        <input type="password" id="pass" placeholder="••••••••" class="w-full pl-11 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-oro/50 transition-all" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-oro text-white font-black py-4 rounded-2xl hover:opacity-90 shadow-lg shadow-oro/20 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <span>INGRESAR</span>
+                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                </button>
+            </form>
+        </div>
+
+        <p class="text-center mt-10 text-slate-300 text-[10px] font-bold uppercase tracking-tighter">
+            Gestión Privada v1.0 • 2026
+        </p>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Lógica temporal para probar
+        document.getElementById('form-login').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const usuario = document.getElementById('user').value;
+            const clave = document.getElementById('pass').value;
+
+            // Simulación de validación
+            if((usuario === "amigo" && clave === "oro123") || (usuario === "socio" && clave === "plata456")) {
+                window.location.href = "index.html"; 
+            } else {
+                alert("Credenciales incorrectas");
+            }
+        });
+    </script>
+</body>
+</html>
