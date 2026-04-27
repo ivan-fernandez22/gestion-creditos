@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// LEGACY / CLIENTES.JS
+// -----------------------------------------------------------------------------
+// Archivo de practica: muestra una implementacion inicial de cliente/credito.
+// Se mantiene como referencia historica y no participa del flujo principal.
+// -----------------------------------------------------------------------------
+
 const clienteEjemplo = {
     id: Date.now(), // ID único temporal
     nombre: "Juan Pérez",

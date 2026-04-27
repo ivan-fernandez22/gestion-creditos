@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// LEGACY / PRUEBACLIENTES.JS
+// -----------------------------------------------------------------------------
+// Script de pruebas manuales para experimentar con alta de clientes y creditos.
+// Es util para aprendizaje; el flujo productivo actual usa Logic.js + main.js.
+// -----------------------------------------------------------------------------
+
 const baseDeDatosClientes = [];
 
 // Función PURA: Solo crea y retorna, no toca variables externas

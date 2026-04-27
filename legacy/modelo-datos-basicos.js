@@ -1,5 +1,8 @@
 "use strict";
 
+// Variante simplificada del modelo de datos para aprendizaje paso a paso.
+// Se conserva como apoyo didactico frente al modelo completo.
+
 // -----------------------------------------------------------------------------
 // MODELO DE DATOS (VERSION BASICA)
 // -----------------------------------------------------------------------------

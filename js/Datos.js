@@ -1,11 +1,20 @@
 "use strict";
 
-// Estructuras base del sistema. Este archivo define el "molde" de los datos.
+// -----------------------------------------------------------------------------
+// DATOS.JS
+// -----------------------------------------------------------------------------
+// Este archivo centraliza constantes y estructuras base del sistema.
+// No contiene logica de negocio: solo define "como se guarda" cada entidad.
+// -----------------------------------------------------------------------------
 window.Datos = {
+    // Version de estructura para futuras migraciones.
     SCHEMA_VERSION: "1.0.0",
+    // Clave unica usada en localStorage.
     STORAGE_KEY: "capital_plus_db_v1",
+    // Admin por defecto para entorno actual.
     ADMIN_ID_DEFAULT: "admin-demo",
 
+    // Estructura esperada para un cliente.
     ESTRUCTURA_CLIENTE: {
         id: "",
         adminID: "",
@@ -20,6 +29,7 @@ window.Datos = {
         fechaAlta: ""
     },
 
+    // Estructura esperada para un credito.
     ESTRUCTURA_CREDITO: {
         id: "",
         adminID: "",
@@ -37,6 +47,7 @@ window.Datos = {
         fechaAlta: ""
     },
 
+    // Estructura esperada para una cuota.
     ESTRUCTURA_CUOTA: {
         id: "",
         adminID: "",
@@ -50,6 +61,7 @@ window.Datos = {
         fechaAlta: ""
     },
 
+    // Estructura esperada para un pago.
     ESTRUCTURA_PAGO: {
         id: "",
         adminID: "",

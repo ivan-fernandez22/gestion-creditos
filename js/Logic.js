@@ -1,6 +1,8 @@
 "use strict";
 
 (function () {
+    // Modulo central de negocio:
+    // valida datos, persiste en localStorage y calcula estados/resumenes.
     if (!window.Datos) {
         throw new Error("Datos.js debe cargarse antes que Logic.js");
     }
@@ -36,6 +38,10 @@
         COMPLETO: "completo",
         PARCIAL: "parcial"
     };
+
+    // -----------------------------
+    // Helpers de uso general
+    // -----------------------------
 
     // Tolerancia para considerar una cuota como cerrada por redondeos o residuos minimos.
     const TOLERANCIA_CIERRE_CUOTA = 1;
@@ -148,6 +154,10 @@
         return Math.min(Math.max(1, semana), Math.max(1, totalSemanas));
     }
 
+    // -----------------------------
+    // Persistencia en localStorage
+    // -----------------------------
+
     function crearDBVacia() {
         return {
             version: SCHEMA_VERSION,
@@ -257,6 +267,8 @@
         return db.creditos.filter((credito) => credito.adminID === admin && credito.clienteId === id);
     }
 
+    // Intenta resolver el cliente para un pago con prioridad:
+    // 1) clienteId explicito, 2) dni, 3) nombre + apellido.
     function resolverClienteParaPago(db, adminID, payload) {
         const clienteId = texto(payload.clienteId);
         if (clienteId) {
@@ -292,6 +304,7 @@
         return coincidencias[0];
     }
 
+    // Recalcula estado de cuotas segun saldo y vencimiento a fecha de hoy.
     function refrescarVencimientosCredito(db, creditoId, adminID) {
         const hoy = new Date().toISOString().slice(0, 10);
 
@@ -315,6 +328,7 @@
         });
     }
 
+    // Recalcula estado general del credito a partir de sus cuotas.
     function actualizarEstadoCredito(db, creditoId, adminID) {
         refrescarVencimientosCredito(db, creditoId, adminID);
 
@@ -338,13 +352,25 @@
     }
 
 
+    // -----------------------------
+    // Operaciones de negocio
+    // -----------------------------
+
 
 // CREAR AL CLIENTE: valida que el DNI no exista para el mismo adminID.
     function crearCliente(payload) {
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
         const dni = normalizarDNI(payload.dni);
+        const nombre = texto(payload.nombre);
+        const apellido = texto(payload.apellido);
+        const telefono = texto(payload.telefono);
+        const direccionReal = texto(payload.direccionReal);
 
         if (!dni) throw new Error("El DNI es obligatorio.");
+        if (!nombre) throw new Error("El nombre es obligatorio.");
+        if (!apellido) throw new Error("El apellido es obligatorio.");
+        if (!telefono) throw new Error("El teléfono es obligatorio.");
+        if (!direccionReal) throw new Error("La dirección real es obligatoria.");
 
         const db = cargarDB();
         const clienteExistente = buscarClientePorDNI(db, adminID, dni);
@@ -356,11 +382,11 @@
         const cliente = {
             id: crearId(),
             adminID,
-            nombre: texto(payload.nombre),
-            apellido: texto(payload.apellido),
+            nombre,
+            apellido,
             dni,
-            telefono: texto(payload.telefono),
-            direccionReal: texto(payload.direccionReal),
+            telefono,
+            direccionReal,
             direccionComercio: texto(payload.direccionComercio),
             rubro: texto(payload.rubro),
             estado: ESTADOS_CLIENTE.ACTIVO,
@@ -379,9 +405,11 @@
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
         const plan = numero(payload.plan);
         const montoSolicitado = redondearMoneda(payload.montoSolicitado);
+        const nombreCredito = texto(payload.nombre);
 
         const planElegido = PLANES_CREDITO[plan];
         if (!planElegido) throw new Error("Plan invalido. Usa 12, 17, 24 o 30.");
+        if (!nombreCredito) throw new Error("El nombre del crédito es obligatorio.");
         if (montoSolicitado <= 0) throw new Error("El monto solicitado debe ser mayor a 0.");
         if (!texto(payload.fechaInicio)) throw new Error("La fecha de inicio es obligatoria.");
 
@@ -397,7 +425,7 @@
             id: crearId(),
             adminID,
             clienteId: cliente.id,
-            nombre: texto(payload.nombre),
+            nombre: nombreCredito,
             plan,
             tasaInteres: redondearMoneda((planElegido.multiplicador - 1) * 100),
             montoSolicitado,
@@ -448,6 +476,9 @@
     function registrarPago(payload) {
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
         const db = cargarDB();
+
+        if (!texto(payload.creditoId)) throw new Error("Debes seleccionar un crédito para registrar el pago.");
+        if (!texto(payload.fechaPago)) throw new Error("La fecha de pago es obligatoria.");
 
         const cliente = resolverClienteParaPago(db, adminID, payload);
 
@@ -515,6 +546,89 @@
         return { pago, cuota, credito: creditoActualizado };
     }
 
+    // ELIMINAR CREDITO: borra el credito y sus cuotas/pagos asociados.
+    function eliminarCredito(adminID, creditoId) {
+        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const idCredito = texto(creditoId);
+        const db = cargarDB();
+
+        const credito = db.creditos.find(
+            (item) => item.adminID === admin && item.id === idCredito
+        );
+        if (!credito) {
+            throw new Error("No existe el crédito seleccionado para eliminar.");
+        }
+
+        const creditosAntes = db.creditos.length;
+        const cuotasAntes = db.cuotas.length;
+        const pagosAntes = db.pagos.length;
+
+        db.creditos = db.creditos.filter(
+            (item) => !(item.adminID === admin && item.id === idCredito)
+        );
+        db.cuotas = db.cuotas.filter(
+            (cuota) => !(cuota.adminID === admin && cuota.creditoId === idCredito)
+        );
+        db.pagos = db.pagos.filter(
+            (pago) => !(pago.adminID === admin && pago.creditoId === idCredito)
+        );
+
+        guardarDB(db);
+
+        return {
+            creditoId: idCredito,
+            creditosEliminados: creditosAntes - db.creditos.length,
+            cuotasEliminadas: cuotasAntes - db.cuotas.length,
+            pagosEliminados: pagosAntes - db.pagos.length
+        };
+    }
+
+    // ELIMINAR CLIENTE: borra cliente y todo lo que cuelga de sus creditos.
+    function eliminarCliente(adminID, clienteId) {
+        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const idCliente = texto(clienteId);
+        const db = cargarDB();
+
+        const cliente = db.clientes.find(
+            (item) => item.adminID === admin && item.id === idCliente
+        );
+        if (!cliente) {
+            throw new Error("No existe el cliente seleccionado para eliminar.");
+        }
+
+        const creditosClienteIds = db.creditos
+            .filter((credito) => credito.adminID === admin && credito.clienteId === idCliente)
+            .map((credito) => credito.id);
+
+        const clientesAntes = db.clientes.length;
+        const creditosAntes = db.creditos.length;
+        const cuotasAntes = db.cuotas.length;
+        const pagosAntes = db.pagos.length;
+
+        db.clientes = db.clientes.filter(
+            (item) => !(item.adminID === admin && item.id === idCliente)
+        );
+        db.creditos = db.creditos.filter(
+            (credito) => !(credito.adminID === admin && credito.clienteId === idCliente)
+        );
+        db.cuotas = db.cuotas.filter(
+            (cuota) => !(cuota.adminID === admin && creditosClienteIds.includes(cuota.creditoId))
+        );
+        db.pagos = db.pagos.filter(
+            (pago) => !(pago.adminID === admin && creditosClienteIds.includes(pago.creditoId))
+        );
+
+        guardarDB(db);
+
+        return {
+            clienteId: idCliente,
+            clientesEliminados: clientesAntes - db.clientes.length,
+            creditosEliminados: creditosAntes - db.creditos.length,
+            cuotasEliminadas: cuotasAntes - db.cuotas.length,
+            pagosEliminados: pagosAntes - db.pagos.length
+        };
+    }
+
 
 
 // -----------------------------------------------------------------------------
@@ -545,6 +659,7 @@
     }
 
     function obtenerResumenCredito(db, credito) {
+        // Arma un objeto resumen pensado para la UI (avance, semana, deudas, etc.).
         const cuotas = db.cuotas.filter(
             (cuota) => cuota.creditoId === credito.id && cuota.adminID === credito.adminID
         );
@@ -601,6 +716,7 @@
         let recaudadoAcumulado = 0;
         let gananciaAcumulada = 0;
 
+        // Cada semana agrupa 6 dias de cobro (lunes a sabado).
         for (let semana = 1; semana <= totalSemanas; semana += 1) {
             const inicioSemana = sumarDiasCobro(credito.fechaInicio, (semana - 1) * 6);
             const finSemana = sumarDiasCobro(inicioSemana, 5);
@@ -664,6 +780,7 @@
         };
     }
 
+    // Devuelve clientes ya enriquecidos con resumenes de sus creditos.
     function obtenerClientesConResumen(adminID) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const db = cargarDB();
@@ -703,7 +820,7 @@
         });
     }
 
-    // Funciones para renderizar en el DOM. Se pueden adaptar segun tu estructura HTML y estilos.
+    // Filtro textual simple por nombre/apellido.
     function buscarClientesPorNombre(adminID, textoBusqueda) {
         const clientes = obtenerClientesConResumen(adminID);
         const filtro = texto(textoBusqueda).toLowerCase();
@@ -715,6 +832,7 @@
         });
     }
 
+    // API publica consumida por los modulos de interfaz.
     window.Logic = {
         PLANES_CREDITO,
         ESTADOS_CLIENTE,
@@ -728,6 +846,8 @@
         crearCliente,
         crearCredito,
         registrarPago,
+        eliminarCredito,
+        eliminarCliente,
         listarCreditosPorDni,
         listarCreditosPorNombreApellido,
         listarCreditosPorClienteId,

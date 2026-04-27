@@ -1,5 +1,8 @@
 "use strict";
 
+// Archivo legacy de referencia academica para modelado de datos.
+// Mantiene ejemplos detallados y comentarios didacticos.
+
 // -----------------------------------------------------------------------------
 // MODELO DE DATOS
 // -----------------------------------------------------------------------------
