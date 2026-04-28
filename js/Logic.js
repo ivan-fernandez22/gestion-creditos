@@ -13,7 +13,7 @@
         12: { cuotas: 12, multiplicador: 1.2 },
         17: { cuotas: 17, multiplicador: 1.258 },
         24: { cuotas: 24, multiplicador: 1.408 },
-        30: { cuotas: 30, multiplicador: 1.6 }
+        36: { cuotas: 36, multiplicador: 1.6 }
     };
 
     const ESTADOS_CLIENTE = {
@@ -399,6 +399,75 @@
         return cliente;
     }
 
+    function actualizarCliente(adminID, clienteId, cambios) {
+        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const id = texto(clienteId);
+
+        if (!id) throw new Error("No existe el cliente seleccionado para editar.");
+
+        const db = cargarDB();
+        const idx = db.clientes.findIndex(
+            (cliente) => cliente.adminID === admin && cliente.id === id
+        );
+
+        if (idx === -1) throw new Error("No existe el cliente seleccionado para editar.");
+
+        const actual = db.clientes[idx];
+        const actualizado = { ...actual };
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "dni")) {
+            const dni = normalizarDNI(cambios.dni);
+            if (!dni) throw new Error("El DNI es obligatorio.");
+            const existente = db.clientes.find(
+                (cliente) =>
+                    cliente.adminID === admin &&
+                    cliente.id !== id &&
+                    normalizarDNI(cliente.dni) === dni
+            );
+            if (existente) {
+                throw new Error("Ya existe un cliente con ese DNI para este administrador.");
+            }
+            actualizado.dni = dni;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "nombre")) {
+            const nombre = texto(cambios.nombre);
+            if (!nombre) throw new Error("El nombre es obligatorio.");
+            actualizado.nombre = nombre;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "apellido")) {
+            const apellido = texto(cambios.apellido);
+            if (!apellido) throw new Error("El apellido es obligatorio.");
+            actualizado.apellido = apellido;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "telefono")) {
+            const telefono = texto(cambios.telefono);
+            if (!telefono) throw new Error("El teléfono es obligatorio.");
+            actualizado.telefono = telefono;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "direccionReal")) {
+            const direccionReal = texto(cambios.direccionReal);
+            if (!direccionReal) throw new Error("La dirección real es obligatoria.");
+            actualizado.direccionReal = direccionReal;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "direccionComercio")) {
+            actualizado.direccionComercio = texto(cambios.direccionComercio);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "rubro")) {
+            actualizado.rubro = texto(cambios.rubro);
+        }
+
+        db.clientes[idx] = actualizado;
+        guardarDB(db);
+
+        return actualizado;
+    }
+
 
 // CREAR AL CREDITO: valida que el cliente exista y calcula montos y cuotas.
     function crearCredito(payload) {
@@ -408,7 +477,7 @@
         const nombreCredito = texto(payload.nombre);
 
         const planElegido = PLANES_CREDITO[plan];
-        if (!planElegido) throw new Error("Plan invalido. Usa 12, 17, 24 o 30.");
+        if (!planElegido) throw new Error("Plan invalido. Usa 12, 17, 24 o 36.");
         if (!nombreCredito) throw new Error("El nombre del crédito es obligatorio.");
         if (montoSolicitado <= 0) throw new Error("El monto solicitado debe ser mayor a 0.");
         if (!texto(payload.fechaInicio)) throw new Error("La fecha de inicio es obligatoria.");
@@ -417,7 +486,7 @@
         const cliente = buscarClientePorDNI(db, adminID, payload.dniCliente);
         if (!cliente) throw new Error("No existe cliente para ese DNI.");
 
-        const fechaInicioNormalizada = sumarDiasCobro(texto(payload.fechaInicio), 0);
+        const fechaInicioNormalizada = sumarDiasCobro(texto(payload.fechaInicio), 1);
         const montoTotal = redondearMoneda(montoSolicitado * planElegido.multiplicador);
         const cuotaBase = redondearMoneda(montoTotal / planElegido.cuotas);
 
@@ -468,6 +537,34 @@
         guardarDB(db);
 
         return { credito, cuotas };
+    }
+
+    function actualizarCredito(adminID, creditoId, cambios) {
+        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const id = texto(creditoId);
+
+        if (!id) throw new Error("No existe el crédito seleccionado para editar.");
+
+        const db = cargarDB();
+        const idx = db.creditos.findIndex(
+            (credito) => credito.adminID === admin && credito.id === id
+        );
+
+        if (idx === -1) throw new Error("No existe el crédito seleccionado para editar.");
+
+        const actual = db.creditos[idx];
+        const actualizado = { ...actual };
+
+        if (Object.prototype.hasOwnProperty.call(cambios, "nombre")) {
+            const nombre = texto(cambios.nombre);
+            if (!nombre) throw new Error("El nombre del crédito es obligatorio.");
+            actualizado.nombre = nombre;
+        }
+
+        db.creditos[idx] = actualizado;
+        guardarDB(db);
+
+        return actualizado;
     }
 
 
@@ -664,6 +761,8 @@
             (cuota) => cuota.creditoId === credito.id && cuota.adminID === credito.adminID
         );
 
+        const cuotasPorId = new Map(cuotas.map((cuota) => [cuota.id, cuota]));
+
         const pagos = db.pagos.filter(
             (pago) => pago.creditoId === credito.id && pago.adminID === credito.adminID
         );
@@ -699,6 +798,37 @@
                 .reduce((acc, pago) => acc + numero(pago.monto), 0)
         );
 
+        function calcularDiferenciaContraSemana(inicioSemana, finSemana) {
+            const pagosSemana = pagos.filter(
+                (pago) =>
+                    pago.fechaPago &&
+                    compararFechasISO(pago.fechaPago, inicioSemana) >= 0 &&
+                    compararFechasISO(pago.fechaPago, finSemana) <= 0
+            );
+
+            const pagosPorCuota = new Map();
+            pagosSemana.forEach((pago) => {
+                if (!cuotasPorId.has(pago.cuotaId)) return;
+                const acumulado = numero(pagosPorCuota.get(pago.cuotaId)) + numero(pago.monto);
+                pagosPorCuota.set(pago.cuotaId, acumulado);
+            });
+
+            let total = 0;
+            pagosPorCuota.forEach((montoPagado, cuotaId) => {
+                const cuota = cuotasPorId.get(cuotaId);
+                if (!cuota) return;
+                const diferencia = redondearMoneda(numero(cuota.montoEsperado) - numero(montoPagado));
+                if (diferencia > 0) total += diferencia;
+            });
+
+            return redondearMoneda(total);
+        }
+
+        const diferenciaContraSemanaActual = calcularDiferenciaContraSemana(
+            inicioSemanaActual,
+            finSemanaActual
+        );
+
         const deudaSemanaActual = redondearMoneda(
             cuotas
                 .filter(
@@ -715,6 +845,7 @@
         const historialSemanal = [];
         let recaudadoAcumulado = 0;
         let gananciaAcumulada = 0;
+        let diferenciaContraAcumulada = 0;
 
         // Cada semana agrupa 6 dias de cobro (lunes a sabado).
         for (let semana = 1; semana <= totalSemanas; semana += 1) {
@@ -732,6 +863,8 @@
                     .reduce((acc, pago) => acc + numero(pago.monto), 0)
             );
 
+            const diferenciaContraSemana = calcularDiferenciaContraSemana(inicioSemana, finSemana);
+
             const pendienteSemana = redondearMoneda(
                 cuotas
                     .filter(
@@ -746,6 +879,7 @@
             const gananciaSemana = redondearMoneda(recaudadoSemana * 0.15);
             recaudadoAcumulado = redondearMoneda(recaudadoAcumulado + recaudadoSemana);
             gananciaAcumulada = redondearMoneda(gananciaAcumulada + gananciaSemana);
+            diferenciaContraAcumulada = redondearMoneda(diferenciaContraAcumulada + diferenciaContraSemana);
 
             historialSemanal.push({
                 semana,
@@ -755,7 +889,9 @@
                 pendiente: pendienteSemana,
                 ganancia: gananciaSemana,
                 recaudadoAcumulado,
-                gananciaAcumulada
+                gananciaAcumulada,
+                diferenciaContra: diferenciaContraSemana,
+                diferenciaContraAcumulada
             });
         }
 
@@ -775,6 +911,7 @@
             recaudadoSemanaActual,
             deudaSemanaActual,
             gananciaSemanaActual,
+            diferenciaContraSemanaActual,
             historialSemanal,
             deuda
         };
@@ -844,7 +981,9 @@
         cargarDB,
         guardarDB,
         crearCliente,
+        actualizarCliente,
         crearCredito,
+        actualizarCredito,
         registrarPago,
         eliminarCredito,
         eliminarCliente,

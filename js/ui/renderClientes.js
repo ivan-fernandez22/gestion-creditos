@@ -14,6 +14,7 @@
 
     function colorEstado(estado) {
         if (estado === "finalizado") return "bg-slate-200 text-slate-700";
+        if (estado === "urgente") return "bg-rose-200 text-rose-800";
         if (estado === "atrasado") return "bg-rose-100 text-rose-700";
         return "bg-emerald-100 text-emerald-700";
     }
@@ -21,6 +22,9 @@
     function claseTarjetaCredito(estado) {
         if (estado === "finalizado") {
             return "bg-emerald-50 border-emerald-200 hover:border-emerald-300";
+        }
+        if (estado === "urgente") {
+            return "bg-rose-100 border-rose-300 hover:border-rose-400";
         }
         if (estado === "atrasado") {
             return "bg-rose-50 border-rose-200 hover:border-rose-300";
@@ -31,16 +35,27 @@
     // Colores de la etiqueta de estado general de cliente.
     function colorEstadoCliente(estado) {
         if (estado === "finalizado") return "bg-slate-300 text-slate-700";
+        if (estado === "urgente") return "bg-rose-200 text-rose-800";
         if (estado === "atrasado") return "bg-rose-100 text-rose-700";
         if (estado === "activo") return "bg-emerald-100 text-emerald-700";
         return "bg-slate-100 text-slate-600";
     }
 
+    function obtenerEstadoVisualCredito(credito) {
+        const historial = credito?.historialSemanal || [];
+        const totalDiferenciaContra = historial.length
+            ? historial[historial.length - 1].diferenciaContraAcumulada
+            : 0;
+        if (Number(totalDiferenciaContra || 0) > 20000) return "urgente";
+        return credito.estado;
+    }
+
     // Estado visual calculado desde los creditos mostrados en pantalla.
     function obtenerEstadoVisualCliente(creditos) {
         if (!Array.isArray(creditos) || !creditos.length) return "inactivo";
-        if (creditos.every((credito) => credito.estado === "finalizado")) return "finalizado";
-        if (creditos.some((credito) => credito.estado === "atrasado")) return "atrasado";
+        if (creditos.every((credito) => obtenerEstadoVisualCredito(credito) === "finalizado")) return "finalizado";
+        if (creditos.some((credito) => obtenerEstadoVisualCredito(credito) === "urgente")) return "urgente";
+        if (creditos.some((credito) => obtenerEstadoVisualCredito(credito) === "atrasado")) return "atrasado";
         return "activo";
     }
 
@@ -71,10 +86,11 @@
     function aplicarFiltroEstado(clientes, filtroEstado) {
         if (filtroEstado === "todos") {
             const prioridadEstado = {
-                atrasado: 0,
-                activo: 1,
-                finalizado: 2,
-                inactivo: 3
+                urgente: 0,
+                atrasado: 1,
+                activo: 2,
+                finalizado: 3,
+                inactivo: 4
             };
 
             return [...clientes].sort((a, b) => {
@@ -95,14 +111,18 @@
             filtroEstado === "activos"
                 ? "activo"
                 : filtroEstado === "urgentes"
-                    ? "atrasado"
+                    ? "urgente"
                     : "finalizado";
 
         return clientes
             .map((cliente) => {
-                const creditosFiltrados = cliente.creditos.filter(
-                    (credito) => credito.estado === estadoObjetivo
-                );
+                const creditosFiltrados = cliente.creditos.filter((credito) => {
+                    const estadoCredito = obtenerEstadoVisualCredito(credito);
+                    if (estadoObjetivo === "urgente") {
+                        return estadoCredito === "urgente" || estadoCredito === "atrasado";
+                    }
+                    return estadoCredito === estadoObjetivo;
+                });
 
                 if (!creditosFiltrados.length) return null;
 
@@ -116,7 +136,7 @@
             .filter(Boolean);
     }
 
-            // Renderiza la grilla interna de creditos por cliente.
+    // Renderiza la grilla interna de creditos por cliente.
     function renderCreditos(creditos) {
         if (!creditos.length) {
             return `
@@ -128,10 +148,25 @@
         }
 
         return creditos
-            .map(
-                (credito) => `
-                    <div class="relative rounded-3xl border p-5 group transition-all ${claseTarjetaCredito(credito.estado)}">
+            .map((credito) => {
+                const historialSemanal = credito.historialSemanal || [];
+                const totalRecaudado = historialSemanal.length
+                    ? historialSemanal[historialSemanal.length - 1].recaudadoAcumulado
+                    : 0;
+                const quedaDevolver = Math.max(0, Number(credito.montoTotal || 0) - Number(totalRecaudado || 0));
+                const totalDiferenciaContra = historialSemanal.length
+                    ? historialSemanal[historialSemanal.length - 1].diferenciaContraAcumulada
+                    : 0;
+                const diferenciaContraUrgente = Number(totalDiferenciaContra || 0) > 20000;
+
+                const estadoVisualCredito = obtenerEstadoVisualCredito(credito);
+
+                return `
+                    <div class="relative rounded-3xl border p-5 group transition-all ${claseTarjetaCredito(estadoVisualCredito)}">
                         <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
+                            <button data-action="editar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-slate-500 hover:text-slate-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Editar crédito">
+                                <i data-lucide="pencil" class="w-5 h-5"></i>
+                            </button>
                             <button data-action="eliminar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-rose-500 hover:text-rose-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Eliminar crédito">
                                 <i data-lucide="trash-2" class="w-5 h-5"></i>
                             </button>
@@ -194,25 +229,43 @@
                                     <span class="text-[11px] font-black text-slate-700">Semana ${credito.semanaActual} de ${credito.totalSemanas}</span>
                                 </div>
                                 <div class="flex justify-between items-center">
-                                    <span class="text-[11px] font-bold text-slate-500 uppercase">Semanal</span>
+                                    <span class="text-[11px] font-bold text-oro uppercase">Queda devolver</span>
+                                    <span class="text-sm font-black text-oro">${formatearMoneda(quedaDevolver)}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[11px] font-bold text-slate-800 uppercase">Acumulado total</span>
+                                    <span class="text-sm font-black text-slate-800">${formatearMoneda(totalRecaudado)}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[11px] font-bold text-slate-800 uppercase">Acumulado esta semana</span>
                                     <span class="text-sm font-black text-slate-800">${formatearMoneda(credito.recaudadoSemanaActual)}</span>
                                 </div>
                                 <div class="flex justify-between items-center">
-                                    <span class="text-[11px] font-bold text-emerald-600 uppercase">Ganancia (15%)</span>
+                                    <span class="text-[11px] font-bold text-emerald-600 uppercase">Ganancia semanal(15%)</span>
                                     <span class="text-sm font-black text-emerald-700">+${formatearMoneda(credito.gananciaSemanaActual)}</span>
                                 </div>
                                 <div class="flex justify-between items-center border-t border-slate-50 pt-2">
                                     <span class="text-[11px] font-bold text-rose-500 uppercase tracking-tighter">Debe (Esta semana)</span>
                                     <span class="text-sm font-black text-rose-700">${formatearMoneda(credito.deudaSemanaActual)}</span>
                                 </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[11px] font-bold text-rose-500 uppercase tracking-tighter">Diferencia en contra semanal</span>
+                                    <span class="text-sm font-black text-rose-700">${formatearMoneda(credito.diferenciaContraSemanaActual || 0)}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[11px] font-bold ${diferenciaContraUrgente ? "text-rose-500" : "text-rose-500"} uppercase tracking-tighter">Diferencia en contra total</span>
+                                    <span class="text-sm font-black ${diferenciaContraUrgente ? "text-rose-300" : "text-rose-700"}">
+                                        ${formatearMoneda(totalDiferenciaContra || 0)}${diferenciaContraUrgente ? " · Urgente" : ""}
+                                    </span>
+                                </div>
                                 <div class="pt-1">
-                                    <span class="text-[10px] px-2 py-1 rounded-full font-bold uppercase ${colorEstado(credito.estado)}">${credito.estado}</span>
+                                    <span class="text-[10px] px-2 py-1 rounded-full font-bold uppercase ${colorEstado(estadoVisualCredito)}">${estadoVisualCredito}</span>
                                 </div>
 
                                 <div class="border-t border-slate-100 pt-2">
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-2">Historial semanal acumulado</p>
+                                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-2">Historial semanal</p>
                                     <div class="max-h-32 overflow-y-auto pr-1 space-y-1">
-                                        ${(credito.historialSemanal || [])
+                                        ${historialSemanal
                                             .map(
                                                 (semana) => `
                                                     <div class="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2 py-1">
@@ -220,9 +273,13 @@
                                                             <span>Sem ${semana.semana}</span>
                                                             <span>${formatearMoneda(semana.recaudado)}</span>
                                                         </div>
-                                                        <div class="flex justify-between items-center text-[10px] text-slate-500">
-                                                            <span>Acum.</span>
-                                                            <span>${formatearMoneda(semana.recaudadoAcumulado)}</span>
+                                                        <div class="flex justify-between items-center text-[10px] text-rose-600">
+                                                            <span>Dif. en contra</span>
+                                                            <span>${formatearMoneda(semana.diferenciaContra || 0)}</span>
+                                                        </div>
+                                                        <div class="flex justify-between items-center text-[10px] text-emerald-700">
+                                                            <span>Ganancia</span>
+                                                            <span>+${formatearMoneda(semana.ganancia || 0)}</span>
                                                         </div>
                                                     </div>
                                                 `
@@ -233,8 +290,8 @@
                             </div>
                         </div>
                     </div>
-                `
-            )
+                `;
+            })
             .join("");
     }
 
@@ -325,7 +382,9 @@
                                 <a href="${armarLinkWhatsApp(cliente.telefono)}" target="_blank" rel="noopener noreferrer" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all">
                                     <i data-lucide="message-circle" class="w-4 h-4"></i> WhatsApp
                                 </a>
-                                <button class="p-2 text-slate-400 hover:text-oro transition-all"><i data-lucide="pencil" class="w-5 h-5"></i></button>
+                                <button data-action="editar-cliente" data-cliente-id="${cliente.id}" data-cliente-dni="${cliente.dni}" data-cliente-nombre="${cliente.nombre}" data-cliente-apellido="${cliente.apellido}" data-cliente-telefono="${cliente.telefono}" data-cliente-direccion-real="${cliente.direccionReal || ""}" data-cliente-direccion-comercio="${cliente.direccionComercio || ""}" data-cliente-rubro="${cliente.rubro || ""}" class="p-2 text-slate-400 hover:text-oro transition-all" title="Editar cliente">
+                                    <i data-lucide="pencil" class="w-5 h-5"></i>
+                                </button>
                                 <button data-action="eliminar-cliente" data-cliente-id="${cliente.id}" data-cliente-nombre="${cliente.nombre} ${cliente.apellido}" class="p-2 text-rose-500 hover:text-rose-700 transition-all" title="Eliminar cliente">
                                     <i data-lucide="trash-2" class="w-5 h-5"></i>
                                 </button>
@@ -338,10 +397,10 @@
                         </div>
 
                         <div class="grid grid-cols-2 gap-3 mt-4">
-                            <button class="flex items-center justify-center gap-2 py-3 bg-emerald-100 text-emerald-700 rounded-2xl font-bold text-xs uppercase hover:bg-emerald-200 transition-all">
+                            <button data-action="agregar-credito" data-cliente-id="${cliente.id}" data-cliente-dni="${cliente.dni}" data-cliente-nombre="${cliente.nombre}" data-cliente-apellido="${cliente.apellido}" class="flex items-center justify-center gap-2 py-3 bg-emerald-100 text-emerald-700 rounded-2xl font-bold text-xs uppercase hover:bg-emerald-200 transition-all">
                                 <i data-lucide="plus-circle" class="w-4 h-4"></i> Nuevo Crédito
                             </button>
-                            <button class="flex items-center justify-center gap-2 py-3 bg-slate-800 text-white rounded-2xl font-bold text-xs uppercase hover:bg-black shadow-lg active:scale-95 transition-all">
+                            <button data-action="agregar-pago" data-cliente-id="${cliente.id}" data-cliente-dni="${cliente.dni}" data-cliente-nombre="${cliente.nombre}" data-cliente-apellido="${cliente.apellido}" class="flex items-center justify-center gap-2 py-3 bg-slate-800 text-white rounded-2xl font-bold text-xs uppercase hover:bg-black shadow-lg active:scale-95 transition-all">
                                 <i data-lucide="circle-dollar-sign" class="w-4 h-4"></i> Registrar Pago
                             </button>
                         </div>

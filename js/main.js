@@ -130,6 +130,253 @@
         return confirm(`${titulo}\n\n${texto}`);
     }
 
+    function formatearMoneda(valor) {
+        return new Intl.NumberFormat("es-AR", {
+            style: "currency",
+            currency: "ARS",
+            minimumFractionDigits: 2
+        }).format(Number(valor || 0));
+    }
+
+    function extraerClienteDesdeBoton(boton) {
+        return {
+            id: boton.dataset.clienteId,
+            dni: boton.dataset.clienteDni,
+            nombre: boton.dataset.clienteNombre,
+            apellido: boton.dataset.clienteApellido,
+            telefono: boton.dataset.clienteTelefono,
+            direccionReal: boton.dataset.clienteDireccionReal,
+            direccionComercio: boton.dataset.clienteDireccionComercio,
+            rubro: boton.dataset.clienteRubro
+        };
+    }
+
+    function extraerCreditoDesdeBoton(boton) {
+        return {
+            id: boton.dataset.creditoId,
+            nombre: boton.dataset.creditoNombre
+        };
+    }
+
+    async function abrirModalEditarCliente(cliente) {
+        if (!(window.Swal && typeof window.Swal.fire === "function")) {
+            notificar("La edición requiere SweetAlert2.", "info", "Aviso");
+            return null;
+        }
+
+        const resultado = await window.Swal.fire({
+            title: "Editar cliente",
+            width: "20rem",
+            html: `
+                <div class="text-center space-y-3 mx-auto">
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Nombre</label>
+                        <input id="edit-nombre" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.nombre || ""}" placeholder="Nombre" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Apellido</label>
+                        <input id="edit-apellido" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.apellido || ""}" placeholder="Apellido" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">DNI</label>
+                        <input id="edit-dni" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.dni || ""}" placeholder="DNI" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Teléfono</label>
+                        <input id="edit-telefono" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.telefono || ""}" placeholder="Teléfono" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Dirección real</label>
+                        <input id="edit-direccion-real" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.direccionReal || ""}" placeholder="Dirección real" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Dirección comercio</label>
+                        <input id="edit-direccion-comercio" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.direccionComercio || ""}" placeholder="Dirección comercio" />
+                    </div>
+                    <div>
+                        <label class="block text-[13px] font-semibold text-slate-600 mb-1">Rubro</label>
+                        <input id="edit-rubro" class="swal2-input" style="margin:0;height:2.25rem;font-size:14px;text-align:center;border:1px solid #e2e8f0;border-radius:0.75rem;" value="${cliente.rubro || ""}" placeholder="Rubro" />
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Guardar cambios",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#16a34a",
+            cancelButtonColor: "#64748b",
+            focusConfirm: false,
+            preConfirm: () => ({
+                nombre: document.getElementById("edit-nombre").value,
+                apellido: document.getElementById("edit-apellido").value,
+                dni: document.getElementById("edit-dni").value,
+                telefono: document.getElementById("edit-telefono").value,
+                direccionReal: document.getElementById("edit-direccion-real").value,
+                direccionComercio: document.getElementById("edit-direccion-comercio").value,
+                rubro: document.getElementById("edit-rubro").value
+            })
+        });
+
+        return resultado.isConfirmed ? resultado.value : null;
+    }
+
+    async function abrirModalEditarCredito(credito) {
+        if (!(window.Swal && typeof window.Swal.fire === "function")) {
+            notificar("La edición requiere SweetAlert2.", "info", "Aviso");
+            return null;
+        }
+
+        const resultado = await window.Swal.fire({
+            title: "Editar crédito",
+            html: `
+                <div class="text-left space-y-3">
+                    <label class="block text-xs font-semibold text-slate-500">Nombre del crédito</label>
+                    <input id="edit-credito-nombre" class="swal2-input" value="${credito.nombre || ""}" placeholder="Nombre del crédito" />
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Guardar cambios",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#16a34a",
+            cancelButtonColor: "#64748b",
+            focusConfirm: false,
+            preConfirm: () => ({
+                nombre: document.getElementById("edit-credito-nombre").value
+            })
+        });
+
+        return resultado.isConfirmed ? resultado.value : null;
+    }
+
+    async function abrirModalNuevoCredito(cliente) {
+        if (!(window.Swal && typeof window.Swal.fire === "function")) {
+            const campoDni = document.getElementById("dni-credito");
+            if (campoDni) campoDni.value = cliente.dni || "";
+            notificar("Completa el crédito en el formulario principal. DNI cargado.", "info", "Atajo");
+            return null;
+        }
+
+        const resultado = await window.Swal.fire({
+            title: "Nuevo crédito",
+            html: `
+                <div class="text-center space-y-3">
+                    <div class="text-sm font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                        Cliente: ${cliente.nombre || ""} ${cliente.apellido || ""} · DNI ${cliente.dni || ""}
+                    </div>
+                    <label class="block text-[13px] font-bold text-slate-600">Nombre del crédito</label>
+                    <input id="nuevo-credito-nombre" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" placeholder="Ej: Préstamo 1" />
+                    <label class="block text-[13px] font-bold text-slate-600">Plan</label>
+                    <select id="nuevo-credito-plan" class="swal2-select" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;">
+                        <option value="12">12 días</option>
+                        <option value="17">17 días</option>
+                        <option value="24">24 días</option>
+                        <option value="36">36 días</option>
+                    </select>
+                    <label class="block text-[13px] font-bold text-slate-600">Monto solicitado</label>
+                    <input id="nuevo-credito-monto" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" type="number" min="0" step="0.01" placeholder="0" />
+                    <label class="block text-[13px] font-bold text-slate-600">Fecha inicio</label>
+                    <input id="nuevo-credito-fecha" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" type="date" />
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Crear crédito",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#16a34a",
+            cancelButtonColor: "#64748b",
+            focusConfirm: false,
+            preConfirm: () => ({
+                nombre: document.getElementById("nuevo-credito-nombre").value,
+                plan: document.getElementById("nuevo-credito-plan").value,
+                montoSolicitado: document.getElementById("nuevo-credito-monto").value,
+                fechaInicio: document.getElementById("nuevo-credito-fecha").value
+            })
+        });
+
+        return resultado.isConfirmed ? resultado.value : null;
+    }
+
+    async function abrirModalNuevoPago(cliente) {
+        const creditos = window.Logic
+            .listarCreditosPorClienteId(ADMIN_ID_ACTUAL, cliente.id)
+            .filter((credito) => credito.estado !== window.Logic.ESTADOS_CREDITO.FINALIZADO);
+
+        if (!creditos.length) {
+            notificar("El cliente no tiene créditos activos para registrar pagos.", "info", "Aviso");
+            return null;
+        }
+
+        if (!(window.Swal && typeof window.Swal.fire === "function")) {
+            notificar("El pago rápido requiere SweetAlert2.", "info", "Aviso");
+            return null;
+        }
+
+        const opcionesCreditos = creditos
+            .map((credito) => `<option value="${credito.id}">${credito.nombre}</option>`)
+            .join("");
+
+        const resultado = await window.Swal.fire({
+            title: "Registrar pago",
+            html: `
+                <div class="text-center space-y-3">
+                    <div class="text-sm font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                        Cliente: ${cliente.nombre || ""} ${cliente.apellido || ""} · DNI ${cliente.dni || ""}
+                    </div>
+                    <label class="block text-[13px] font-bold text-slate-600">Crédito</label>
+                    <select id="nuevo-pago-credito" class="swal2-select" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;">
+                        ${opcionesCreditos}
+                    </select>
+                    <div id="nuevo-pago-sugerencia" class="text-[12px] text-slate-500"></div>
+                    <label class="block text-[13px] font-bold text-slate-600">Número de cuota (opcional)</label>
+                    <input id="nuevo-pago-cuota" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" type="number" min="1" step="1" placeholder="Auto" />
+                    <label class="block text-[13px] font-bold text-slate-600">Monto pagado</label>
+                    <input id="nuevo-pago-monto" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" type="number" min="0" step="0.01" placeholder="0" />
+                    <label class="block text-[13px] font-bold text-slate-600">Fecha de pago</label>
+                    <input id="nuevo-pago-fecha" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" type="date" />
+                    <label class="block text-[13px] font-bold text-slate-600">Observación</label>
+                    <input id="nuevo-pago-observacion" class="swal2-input" style="margin:0;height:2.1rem;font-size:13px;border:1px solid #e2e8f0;border-radius:0.6rem;" placeholder="Opcional" />
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Registrar pago",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#0f172a",
+            cancelButtonColor: "#64748b",
+            focusConfirm: false,
+            didOpen: () => {
+                const selectCredito = document.getElementById("nuevo-pago-credito");
+                const inputCuota = document.getElementById("nuevo-pago-cuota");
+                const inputMonto = document.getElementById("nuevo-pago-monto");
+                const sugerencia = document.getElementById("nuevo-pago-sugerencia");
+
+                function actualizarSugerencia() {
+                    const creditoId = selectCredito.value;
+                    const cuota = window.Logic.obtenerProximaCuotaPendiente(ADMIN_ID_ACTUAL, creditoId);
+
+                    if (!cuota) {
+                        sugerencia.textContent = "No hay cuotas pendientes para este crédito.";
+                        inputCuota.value = "";
+                        return;
+                    }
+
+                    sugerencia.textContent = `Sugerida: cuota ${cuota.numero} (saldo ${formatearMoneda(cuota.saldoPendiente)}).`;
+                    inputCuota.value = cuota.numero;
+                    inputMonto.value = cuota.saldoPendiente;
+                }
+
+                selectCredito.addEventListener("change", actualizarSugerencia);
+                actualizarSugerencia();
+            },
+            preConfirm: () => ({
+                creditoId: document.getElementById("nuevo-pago-credito").value,
+                nroCuota: document.getElementById("nuevo-pago-cuota").value,
+                montoPagado: document.getElementById("nuevo-pago-monto").value,
+                fechaPago: document.getElementById("nuevo-pago-fecha").value,
+                observacion: document.getElementById("nuevo-pago-observacion").value
+            })
+        });
+
+        return resultado.isConfirmed ? resultado.value : null;
+    }
+
     // Render principal del listado de clientes.
     function renderClientes() {
         window.UIClientes.renderClientes({
@@ -154,6 +401,71 @@
             const accion = botonAccion.dataset.action;
 
             try {
+                if (accion === "editar-cliente") {
+                    const cliente = extraerClienteDesdeBoton(botonAccion);
+                    const cambios = await abrirModalEditarCliente(cliente);
+                    if (!cambios) return;
+
+                    window.Logic.actualizarCliente(ADMIN_ID_ACTUAL, cliente.id, cambios);
+                    renderClientes();
+                    pagosController.cargarOpcionesCreditoPago();
+                    notificar("Cliente actualizado correctamente.", "success", "Listo");
+                    return;
+                }
+
+                if (accion === "editar-credito") {
+                    const credito = extraerCreditoDesdeBoton(botonAccion);
+                    const cambios = await abrirModalEditarCredito(credito);
+                    if (!cambios) return;
+
+                    window.Logic.actualizarCredito(ADMIN_ID_ACTUAL, credito.id, cambios);
+                    renderClientes();
+                    pagosController.cargarOpcionesCreditoPago();
+                    notificar("Crédito actualizado correctamente.", "success", "Listo");
+                    return;
+                }
+
+                if (accion === "agregar-credito") {
+                    const cliente = extraerClienteDesdeBoton(botonAccion);
+                    const datos = await abrirModalNuevoCredito(cliente);
+                    if (!datos) return;
+
+                    window.Logic.crearCredito({
+                        adminID: ADMIN_ID_ACTUAL,
+                        dniCliente: cliente.dni,
+                        nombre: datos.nombre,
+                        plan: datos.plan,
+                        montoSolicitado: datos.montoSolicitado,
+                        fechaInicio: datos.fechaInicio
+                    });
+
+                    renderClientes();
+                    pagosController.cargarOpcionesCreditoPago();
+                    notificar("Crédito cargado correctamente.", "success", "Listo");
+                    return;
+                }
+
+                if (accion === "agregar-pago") {
+                    const cliente = extraerClienteDesdeBoton(botonAccion);
+                    const datos = await abrirModalNuevoPago(cliente);
+                    if (!datos) return;
+
+                    window.Logic.registrarPago({
+                        adminID: ADMIN_ID_ACTUAL,
+                        clienteId: cliente.id,
+                        creditoId: datos.creditoId,
+                        nroCuota: datos.nroCuota,
+                        montoPagado: datos.montoPagado,
+                        fechaPago: datos.fechaPago,
+                        observacion: datos.observacion
+                    });
+
+                    renderClientes();
+                    pagosController.cargarOpcionesCreditoPago();
+                    notificar("Pago registrado correctamente.", "success", "Listo");
+                    return;
+                }
+
                 if (accion === "eliminar-cliente") {
                     const clienteId = botonAccion.dataset.clienteId;
                     const clienteNombre = botonAccion.dataset.clienteNombre || "este cliente";
