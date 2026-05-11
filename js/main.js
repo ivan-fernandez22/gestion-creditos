@@ -26,6 +26,7 @@
         usuarioActual: document.getElementById("usuario-actual"),
         usuarioActualTexto: document.getElementById("usuario-actual-texto"),
         btnLogout: document.getElementById("btn-logout"),
+        btnGanancias: document.getElementById("btn-ganancias"),
         nombrePago: document.getElementById("nombre-pago"),
         apellidoPago: document.getElementById("apellido-pago"),
         bloqueClienteHomonimo: document.getElementById("bloque-cliente-homonimo"),
@@ -33,6 +34,11 @@
         nroCuota: document.getElementById("nro-cuota"),
         infoCuotaPendiente: document.getElementById("info-cuota-pendiente"),
         selectCreditoPago: document.getElementById("select-credito-pago"),
+        appPrincipal: document.getElementById("app-principal"),
+        paginaDesglose: document.getElementById("pagina-desglose"),
+        contenedorDesglose: document.getElementById("contenedor-desglose"),
+        paginaGanancias: document.getElementById("pagina-ganancias"),
+        contenedorGanancias: document.getElementById("contenedor-ganancias"),
         botonesFiltro: Array.from(document.querySelectorAll(".js-filtro-btn"))
     };
 
@@ -138,6 +144,109 @@
         }).format(Number(valor || 0));
     }
 
+    function parseISODateLocal(valor) {
+        if (!valor) return null;
+        const esISO = /^\d{4}-\d{2}-\d{2}$/.test(String(valor));
+        const fecha = esISO ? new Date(`${valor}T00:00:00`) : new Date(valor);
+        if (Number.isNaN(fecha.getTime())) return null;
+        return fecha;
+    }
+
+    function obtenerPagosAdmin() {
+        const db = window.Logic.cargarDB();
+        return db.pagos
+            .filter((pago) => pago.adminID === ADMIN_ID_ACTUAL && pago.fechaPago)
+            .map((pago) => ({
+                ...pago,
+                fechaPagoLocal: parseISODateLocal(pago.fechaPago)
+            }))
+            .filter((pago) => pago.fechaPagoLocal);
+    }
+
+    function obtenerAniosDisponibles(pagos) {
+        const actual = new Date().getFullYear();
+        if (!pagos.length) return [actual];
+
+        const minYear = pagos.reduce((min, pago) => {
+            const year = pago.fechaPagoLocal.getFullYear();
+            return Math.min(min, year);
+        }, actual);
+
+        const anios = [];
+        for (let year = actual; year >= minYear; year -= 1) {
+            anios.push(year);
+        }
+        return anios;
+    }
+
+    function construirGananciasMes(year, monthIndex, pagos) {
+        const inicioMes = new Date(year, monthIndex, 1);
+        const finMes = new Date(year, monthIndex + 1, 0);
+        const semanas = [];
+        let cursor = new Date(inicioMes);
+        let semanaNumero = 1;
+
+        while (cursor <= finMes) {
+            const inicioSemana = new Date(cursor);
+            const finSemana = new Date(cursor);
+            finSemana.setDate(finSemana.getDate() + 6);
+            if (finSemana > finMes) {
+                finSemana.setTime(finMes.getTime());
+            }
+
+            const inicioMs = inicioSemana.getTime();
+            const finMs = new Date(finSemana.getTime());
+            finMs.setHours(23, 59, 59, 999);
+
+            const recaudadoSemana = pagos
+                .filter((pago) => {
+                    const fecha = pago.fechaPagoLocal.getTime();
+                    return fecha >= inicioMs && fecha <= finMs.getTime();
+                })
+                .reduce((acc, pago) => acc + Number(pago.monto || 0), 0);
+
+            semanas.push({
+                numero: semanaNumero,
+                inicio: inicioSemana,
+                fin: finSemana,
+                recaudado: window.Logic.redondearMoneda(recaudadoSemana),
+                ganancia: window.Logic.redondearMoneda(recaudadoSemana * 0.15)
+            });
+
+            cursor = new Date(finSemana);
+            cursor.setDate(cursor.getDate() + 1);
+            semanaNumero += 1;
+        }
+
+        const recaudadoMes = semanas.reduce((acc, semana) => acc + Number(semana.recaudado || 0), 0);
+        const gananciaMes = window.Logic.redondearMoneda(recaudadoMes * 0.15);
+
+        const nombreMes = new Intl.DateTimeFormat("es-AR", { month: "long" }).format(inicioMes);
+
+        return {
+            nombre: nombreMes,
+            semanas,
+            recaudadoMes,
+            gananciaMes
+        };
+    }
+
+    function construirGananciasAnio(year) {
+        const pagos = obtenerPagosAdmin();
+        const pagosAnio = pagos.filter((pago) => pago.fechaPagoLocal.getFullYear() === year);
+        const meses = [];
+
+        for (let mes = 0; mes < 12; mes += 1) {
+            const pagosMes = pagosAnio.filter((pago) => pago.fechaPagoLocal.getMonth() === mes);
+            meses.push(construirGananciasMes(year, mes, pagosMes));
+        }
+
+        return {
+            meses,
+            anios: obtenerAniosDisponibles(pagos)
+        };
+    }
+
     function extraerClienteDesdeBoton(boton) {
         return {
             id: boton.dataset.clienteId,
@@ -156,6 +265,187 @@
             id: boton.dataset.creditoId,
             nombre: boton.dataset.creditoNombre
         };
+    }
+
+    function calcularEstadoVisualCredito(credito) {
+        const historial = credito?.historialSemanal || [];
+        const totalDiferenciaContra = historial.length
+            ? historial[historial.length - 1].diferenciaContraAcumulada
+            : 0;
+        const hoyISO = (() => {
+            const hoy = new Date();
+            const year = hoy.getFullYear();
+            const month = String(hoy.getMonth() + 1).padStart(2, "0");
+            const day = String(hoy.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        })();
+        const diferenciaSemanaActual = Number(credito?.diferenciaContraSemanaActual || 0);
+        const cuotas = Array.isArray(credito?.cuotas) ? credito.cuotas : [];
+        const hayVencidas = cuotas.some((cuota) => {
+            if (!cuota.fechaVencimiento) return false;
+            return cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0;
+        });
+        const faltaPagoEnFecha = false;
+
+        if (
+            faltaPagoEnFecha ||
+            diferenciaSemanaActual > 20000 ||
+            Number(totalDiferenciaContra || 0) > 30000
+        ) {
+            return "urgente";
+        }
+
+        if (hayVencidas) {
+            return "urgente";
+        }
+
+        return credito.estado === "atrasado" ? "urgente" : credito.estado || "activo";
+    }
+
+    function construirCuotasDesglose(credito) {
+        const pagos = Array.isArray(credito?.pagos) ? credito.pagos : [];
+        const pagosPorCuota = new Map();
+
+        pagos.forEach((pago) => {
+            if (!pago.cuotaId) return;
+            const previo = pagosPorCuota.get(pago.cuotaId);
+            if (!previo || (pago.fechaPago && pago.fechaPago > previo.fechaPago)) {
+                pagosPorCuota.set(pago.cuotaId, pago);
+            }
+        });
+
+        return (credito?.cuotas || []).map((cuota) => {
+            let titulo = "Cuota";
+            if (cuota.estado === "paga") {
+                titulo = "Cuota completa";
+            } else if (cuota.estado === "parcial") {
+                titulo = "Pago parcial";
+            } else if (cuota.estado === "vencida") {
+                titulo = "Cuota vencida";
+            } else {
+                titulo = "Proxima cuota";
+            }
+
+            const pago = pagosPorCuota.get(cuota.id);
+            return {
+                ...cuota,
+                titulo,
+                fechaPago: pago?.fechaPago || "",
+                fechaPagoHora: pago?.fechaPagoHora || "",
+                observacion: pago?.observacion || ""
+            };
+        });
+    }
+
+    function construirResumenDesglose(credito) {
+        const historial = credito?.historialSemanal || [];
+        const ultimo = historial.length ? historial[historial.length - 1] : null;
+        return {
+            totalRecaudado: Number(ultimo?.recaudadoAcumulado || 0)
+        };
+    }
+
+    function cerrarDesglose() {
+        if (!refs.paginaDesglose || !refs.appPrincipal) return;
+        refs.paginaDesglose.classList.add("hidden");
+        refs.appPrincipal.classList.remove("hidden");
+        if (refs.contenedorDesglose) {
+            refs.contenedorDesglose.innerHTML = "";
+        }
+        window.scrollTo({ top: 0, behavior: "auto" });
+    }
+
+    function cerrarGanancias() {
+        if (!refs.paginaGanancias || !refs.appPrincipal) return;
+        refs.paginaGanancias.classList.add("hidden");
+        refs.appPrincipal.classList.remove("hidden");
+        if (refs.contenedorGanancias) {
+            refs.contenedorGanancias.innerHTML = "";
+        }
+        window.scrollTo({ top: 0, behavior: "auto" });
+    }
+
+    function imprimirVista(tipo) {
+        const modo = tipo === "ganancias" ? "ganancias" : "desglose";
+        document.body.dataset.print = modo;
+
+        const limpiar = () => {
+            delete document.body.dataset.print;
+            window.removeEventListener("afterprint", limpiar);
+        };
+
+        window.addEventListener("afterprint", limpiar);
+        window.print();
+
+        setTimeout(() => {
+            if (document.body.dataset.print) {
+                limpiar();
+            }
+        }, 1000);
+    }
+
+    function abrirDesglose(creditoId) {
+        if (!refs.paginaDesglose || !refs.appPrincipal || !refs.contenedorDesglose || !window.UIDesglose) {
+            notificar("No se pudo abrir el desglose. Falta inicializar la UI.", "error", "Error");
+            return;
+        }
+
+        const clientes = window.Logic.obtenerClientesConResumen(ADMIN_ID_ACTUAL);
+        let creditoEncontrado = null;
+        let clienteEncontrado = null;
+
+        clientes.some((cliente) => {
+            const credito = (cliente.creditos || []).find((item) => item.id === creditoId);
+            if (!credito) return false;
+            creditoEncontrado = credito;
+            clienteEncontrado = cliente;
+            return true;
+        });
+
+        if (!creditoEncontrado || !clienteEncontrado) {
+            notificar("No se encontro el credito para mostrar el desglose.", "info", "Aviso");
+            return;
+        }
+
+        const estadoVisual = calcularEstadoVisualCredito(creditoEncontrado);
+        const cuotas = construirCuotasDesglose(creditoEncontrado);
+        const resumen = construirResumenDesglose(creditoEncontrado);
+
+        window.UIDesglose.renderDesglose({
+            contenedor: refs.contenedorDesglose,
+            credito: { ...creditoEncontrado, estadoVisual },
+            cliente: clienteEncontrado,
+            cuotas,
+            resumen
+        });
+
+        refs.appPrincipal.classList.add("hidden");
+        refs.paginaDesglose.classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "auto" });
+    }
+
+    function renderGananciasAnio(year) {
+        if (!refs.contenedorGanancias || !window.UIGanancias) return;
+        const datos = construirGananciasAnio(year);
+        window.UIGanancias.renderGanancias({
+            contenedor: refs.contenedorGanancias,
+            year,
+            months: datos.meses,
+            yearOptions: datos.anios
+        });
+    }
+
+    function abrirGanancias(year) {
+        if (!refs.paginaGanancias || !refs.appPrincipal || !refs.contenedorGanancias || !window.UIGanancias) {
+            notificar("No se pudo abrir ganancias. Falta inicializar la UI.", "error", "Error");
+            return;
+        }
+
+        const yearActual = Number(year || new Date().getFullYear());
+        renderGananciasAnio(yearActual);
+        refs.appPrincipal.classList.add("hidden");
+        refs.paginaGanancias.classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "auto" });
     }
 
     async function abrirModalEditarCliente(cliente) {
@@ -413,6 +703,26 @@
                     return;
                 }
 
+                if (accion === "toggle-creditos") {
+                    const targetId = botonAccion.dataset.target;
+                    if (!targetId) return;
+                    const bloque = document.getElementById(targetId);
+                    if (!bloque) return;
+                    const estaOculto = bloque.classList.contains("hidden");
+                    bloque.classList.toggle("hidden");
+
+                    const texto = botonAccion.querySelector(".js-toggle-text");
+                    if (texto) {
+                        texto.textContent = estaOculto ? "Ver menos" : "Ver mas";
+                    }
+
+                    const icono = botonAccion.querySelector("i");
+                    if (icono) {
+                        icono.classList.toggle("rotate-180", estaOculto);
+                    }
+                    return;
+                }
+
                 if (accion === "editar-credito") {
                     const credito = extraerCreditoDesdeBoton(botonAccion);
                     const cambios = await abrirModalEditarCredito(credito);
@@ -466,6 +776,13 @@
                     return;
                 }
 
+                if (accion === "ver-desglose") {
+                    const creditoId = botonAccion.dataset.creditoId;
+                    if (!creditoId) return;
+                    abrirDesglose(creditoId);
+                    return;
+                }
+
                 if (accion === "eliminar-cliente") {
                     const clienteId = botonAccion.dataset.clienteId;
                     const clienteNombre = botonAccion.dataset.clienteNombre || "este cliente";
@@ -502,6 +819,71 @@
                 }
             } catch (error) {
                 notificar(error.message, "error", "Error");
+            }
+        });
+    }
+
+    function inicializarPanelDesglose() {
+        if (!refs.paginaDesglose) return;
+
+        refs.paginaDesglose.addEventListener("click", (event) => {
+            const botonAccion = event.target.closest("button[data-action]");
+
+            if (botonAccion?.dataset.action === "cerrar-desglose") {
+                cerrarDesglose();
+                return;
+            }
+
+            if (botonAccion?.dataset.action === "exportar-desglose") {
+                imprimirVista("desglose");
+                return;
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                cerrarDesglose();
+            }
+        });
+    }
+
+    function inicializarPaginaGanancias() {
+        if (!refs.paginaGanancias) return;
+
+        refs.paginaGanancias.addEventListener("click", (event) => {
+            const botonAccion = event.target.closest("button[data-action]");
+
+            if (botonAccion?.dataset.action === "cerrar-ganancias") {
+                cerrarGanancias();
+                return;
+            }
+
+            if (botonAccion?.dataset.action === "exportar-ganancias") {
+                imprimirVista("ganancias");
+                return;
+            }
+
+            if (botonAccion?.dataset.action === "toggle-semanas") {
+                const targetId = botonAccion.dataset.target;
+                if (!targetId) return;
+                const bloque = document.getElementById(targetId);
+                if (!bloque) return;
+                const estaOculto = bloque.classList.contains("hidden");
+                bloque.classList.toggle("hidden");
+                botonAccion.textContent = estaOculto ? "Ver menos" : "Ver mas";
+            }
+        });
+
+        refs.paginaGanancias.addEventListener("change", (event) => {
+            if (event.target && event.target.id === "ganancias-year") {
+                const year = Number(event.target.value || new Date().getFullYear());
+                renderGananciasAnio(year);
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                cerrarGanancias();
             }
         });
     }
@@ -544,6 +926,12 @@
 
                 window.Auth.cerrarSesion();
                 window.location.href = "login.html";
+            });
+        }
+
+        if (refs.btnGanancias) {
+            refs.btnGanancias.addEventListener("click", () => {
+                abrirGanancias();
             });
         }
 
@@ -607,6 +995,8 @@
         }
 
         inicializarAccionesListado();
+        inicializarPanelDesglose();
+        inicializarPaginaGanancias();
 
         pagosController.inicializarEventos();
 
@@ -632,9 +1022,13 @@
         renderClientes();
     };
 
-    // Placeholder para funcionalidad futura de detalle por credito.
-    window.verDesglose = function verDesglose() {
-        notificar("El desglose detallado se implementara en el siguiente paso.", "info", "Próximamente");
+    // Expuesto para compatibilidad con llamadas globales antiguas.
+    window.verDesglose = function verDesglose(creditoId) {
+        if (creditoId) {
+            abrirDesglose(creditoId);
+            return;
+        }
+        notificar("Selecciona un credito para ver el desglose.", "info", "Aviso");
     };
 
     // Secuencia de arranque de la SPA.
@@ -643,3 +1037,4 @@
     renderClientes();
     pagosController.actualizarInfoCuotaPendiente();
 })();
+

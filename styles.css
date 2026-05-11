@@ -1,0 +1,58 @@
+@media print {
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    @page {
+        margin: 12mm;
+    }
+
+    body {
+        background: #ffffff !important;
+        padding: 0 !important;
+    }
+
+    #app-principal {
+        display: none !important;
+    }
+
+    #pagina-desglose,
+    #pagina-ganancias {
+        display: none !important;
+    }
+
+    body[data-print="desglose"] #pagina-desglose {
+        display: block !important;
+    }
+
+    body[data-print="ganancias"] #pagina-ganancias {
+        display: block !important;
+    }
+
+    #contenedor-desglose .space-y-3 > div {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    #pagina-ganancias .space-y-6 > div {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    #pagina-ganancias,
+    #contenedor-ganancias {
+        page-break-after: avoid;
+    }
+
+    button[data-action="exportar-desglose"],
+    button[data-action="cerrar-desglose"],
+    button[data-action="exportar-ganancias"],
+    button[data-action="cerrar-ganancias"] {
+        display: none !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}

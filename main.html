@@ -24,7 +24,7 @@
 
 <body class="text-slate-900 p-4 md:p-10">
 
-    <div class="max-w-6xl mx-auto">
+    <div id="app-principal" class="max-w-6xl mx-auto">
 
         <header class="mb-10 mt-0 md:mt-2 flex flex-col items-center gap-6">
             <div class="flex items-center gap-4 mt-2 md:mt-0">
@@ -43,6 +43,7 @@
                         <span id="usuario-actual-texto">Usuario</span>
                     </span>
                 </div>
+                <button id="btn-ganancias" type="button" class="px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 hover:bg-emerald-200 transition-all w-fit">Ver ganancias</button>
                 <div id="fecha-actual" class="bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-500 text-white font-bold text-xs w-fit max-w-full"></div>
                 <button id="btn-logout" type="button" class="px-4 py-2 rounded-xl bg-rose-200 text-rose-800 text-xs font-bold border border-rose-300 hover:bg-rose-300 transition-all w-fit">Salir</button>
             </div>
@@ -174,11 +175,25 @@
 
     </div>
 
+    <section id="pagina-desglose" class="hidden min-h-screen w-full">
+        <div class="max-w-4xl mx-auto">
+            <div id="contenedor-desglose"></div>
+        </div>
+    </section>
+
+    <section id="pagina-ganancias" class="hidden min-h-screen w-full">
+        <div class="max-w-4xl mx-auto">
+            <div id="contenedor-ganancias"></div>
+        </div>
+    </section>
+
     <script src="./js/auth.js"></script>
     <script src="./js/Datos.js"></script>
     <script src="./js/Logic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./js/ui/renderClientes.js"></script>
+    <script src="./js/ui/renderDesglose.js"></script>
+    <script src="./js/ui/renderGanancias.js"></script>
     <script src="./js/ui/pagosForm.js"></script>
     <script src="./js/main.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>

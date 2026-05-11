@@ -15,7 +15,7 @@
     function colorEstado(estado) {
         if (estado === "finalizado") return "bg-slate-200 text-slate-700";
         if (estado === "urgente") return "bg-rose-200 text-rose-800";
-        if (estado === "atrasado") return "bg-rose-100 text-rose-700";
+        if (estado === "atrasado") return "bg-rose-200 text-rose-800";
         return "bg-emerald-100 text-emerald-700";
     }
 
@@ -24,10 +24,10 @@
             return "bg-emerald-50 border-emerald-200 hover:border-emerald-300";
         }
         if (estado === "urgente") {
-            return "bg-rose-100 border-rose-300 hover:border-rose-400";
+            return "bg-rose-100 border-2 border-rose-400 hover:border-rose-500 shadow-[0_0_0_3px_rgba(251,113,133,0.25)]";
         }
         if (estado === "atrasado") {
-            return "bg-rose-50 border-rose-200 hover:border-rose-300";
+            return "bg-rose-100 border-2 border-rose-400 hover:border-rose-500 shadow-[0_0_0_3px_rgba(251,113,133,0.25)]";
         }
         return "bg-slate-100 border-slate-200 hover:border-slate-300";
     }
@@ -36,7 +36,7 @@
     function colorEstadoCliente(estado) {
         if (estado === "finalizado") return "bg-slate-300 text-slate-700";
         if (estado === "urgente") return "bg-rose-200 text-rose-800";
-        if (estado === "atrasado") return "bg-rose-100 text-rose-700";
+        if (estado === "atrasado") return "bg-rose-200 text-rose-800";
         if (estado === "activo") return "bg-emerald-100 text-emerald-700";
         return "bg-slate-100 text-slate-600";
     }
@@ -46,8 +46,34 @@
         const totalDiferenciaContra = historial.length
             ? historial[historial.length - 1].diferenciaContraAcumulada
             : 0;
-        if (Number(totalDiferenciaContra || 0) > 20000) return "urgente";
-        return credito.estado;
+        const hoyISO = (() => {
+            const hoy = new Date();
+            const year = hoy.getFullYear();
+            const month = String(hoy.getMonth() + 1).padStart(2, "0");
+            const day = String(hoy.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        })();
+        const diferenciaSemanaActual = Number(credito?.diferenciaContraSemanaActual || 0);
+        const cuotas = Array.isArray(credito?.cuotas) ? credito.cuotas : [];
+        const hayVencidas = cuotas.some((cuota) => {
+            if (!cuota.fechaVencimiento) return false;
+            return cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0;
+        });
+        const faltaPagoEnFecha = false;
+
+        if (
+            faltaPagoEnFecha ||
+            diferenciaSemanaActual > 20000 ||
+            Number(totalDiferenciaContra || 0) > 30000
+        ) {
+            return "urgente";
+        }
+
+        if (hayVencidas) {
+            return "urgente";
+        }
+
+        return credito.estado === "atrasado" ? "urgente" : credito.estado;
     }
 
     // Estado visual calculado desde los creditos mostrados en pantalla.
@@ -55,7 +81,6 @@
         if (!Array.isArray(creditos) || !creditos.length) return "inactivo";
         if (creditos.every((credito) => obtenerEstadoVisualCredito(credito) === "finalizado")) return "finalizado";
         if (creditos.some((credito) => obtenerEstadoVisualCredito(credito) === "urgente")) return "urgente";
-        if (creditos.some((credito) => obtenerEstadoVisualCredito(credito) === "atrasado")) return "atrasado";
         return "activo";
     }
 
@@ -87,10 +112,9 @@
         if (filtroEstado === "todos") {
             const prioridadEstado = {
                 urgente: 0,
-                atrasado: 1,
-                activo: 2,
-                finalizado: 3,
-                inactivo: 4
+                activo: 1,
+                finalizado: 2,
+                inactivo: 3
             };
 
             return [...clientes].sort((a, b) => {
@@ -119,7 +143,7 @@
                 const creditosFiltrados = cliente.creditos.filter((credito) => {
                     const estadoCredito = obtenerEstadoVisualCredito(credito);
                     if (estadoObjetivo === "urgente") {
-                        return estadoCredito === "urgente" || estadoCredito === "atrasado";
+                        return estadoCredito === "urgente";
                     }
                     return estadoCredito === estadoObjetivo;
                 });
@@ -147,11 +171,31 @@
             `;
         }
 
-        return creditos
+        const prioridadEstado = {
+            urgente: 0,
+            activo: 1,
+            finalizado: 2,
+            inactivo: 3
+        };
+
+        const creditosOrdenados = [...creditos].sort((a, b) => {
+            const estadoA = obtenerEstadoVisualCredito(a);
+            const estadoB = obtenerEstadoVisualCredito(b);
+            const prioridadA = prioridadEstado[estadoA] ?? 99;
+            const prioridadB = prioridadEstado[estadoB] ?? 99;
+
+            if (prioridadA !== prioridadB) return prioridadA - prioridadB;
+            return String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" });
+        });
+
+        return creditosOrdenados
             .map((credito) => {
                 const historialSemanal = credito.historialSemanal || [];
                 const totalRecaudado = historialSemanal.length
                     ? historialSemanal[historialSemanal.length - 1].recaudadoAcumulado
+                    : 0;
+                const totalGanancia = historialSemanal.length
+                    ? historialSemanal[historialSemanal.length - 1].gananciaAcumulada
                     : 0;
                 const quedaDevolver = Math.max(0, Number(credito.montoTotal || 0) - Number(totalRecaudado || 0));
                 const totalDiferenciaContra = historialSemanal.length
@@ -170,7 +214,7 @@
                             <button data-action="eliminar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-rose-500 hover:text-rose-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Eliminar crédito">
                                 <i data-lucide="trash-2" class="w-5 h-5"></i>
                             </button>
-                            <button onclick="verDesglose()" class="p-2 bg-white text-slate-600 hover:text-oro rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Ver desglose">
+                            <button data-action="ver-desglose" data-credito-id="${credito.id}" data-cliente-id="${credito.clienteId}" class="p-2 bg-white text-slate-600 hover:text-oro rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Ver desglose">
                                 <i data-lucide="eye" class="w-5 h-5"></i>
                             </button>
                         </div>
@@ -241,6 +285,10 @@
                                     <span class="text-sm font-black text-slate-800">${formatearMoneda(credito.recaudadoSemanaActual)}</span>
                                 </div>
                                 <div class="flex justify-between items-center">
+                                    <span class="text-[11px] font-bold text-emerald-700 uppercase">Ganancia total</span>
+                                    <span class="text-sm font-black text-emerald-700">+${formatearMoneda(totalGanancia)}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
                                     <span class="text-[11px] font-bold text-emerald-600 uppercase">Ganancia semanal(15%)</span>
                                     <span class="text-sm font-black text-emerald-700">+${formatearMoneda(credito.gananciaSemanaActual)}</span>
                                 </div>
@@ -259,7 +307,10 @@
                                     </span>
                                 </div>
                                 <div class="pt-1">
-                                    <span class="text-[10px] px-2 py-1 rounded-full font-bold uppercase ${colorEstado(estadoVisualCredito)}">${estadoVisualCredito}</span>
+                                    <span class="${estadoVisualCredito === "urgente" ? "text-[11px] px-3 py-1.5 shadow-sm" : "text-[10px] px-2 py-1"} rounded-full font-bold uppercase inline-flex items-center gap-1 ${colorEstado(estadoVisualCredito)}">
+                                        ${estadoVisualCredito === "urgente" ? "<span class=\"w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse shadow-[0_0_0_6px_rgba(251,113,133,0.25)]\"></span>" : ""}
+                                        ${estadoVisualCredito}
+                                    </span>
                                 </div>
 
                                 <div class="border-t border-slate-100 pt-2">
@@ -365,7 +416,7 @@
                 const estadoVisual = obtenerEstadoVisualCliente(cliente.creditos);
 
                 return `
-                    <div class="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                    <div class="p-6 rounded-[2.5rem] border shadow-sm ${estadoVisual === "urgente" ? "bg-rose-50 border-rose-200" : "bg-white border-slate-200"}">
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
                             <div>
                                 <div class="flex items-center gap-3">
@@ -392,8 +443,16 @@
                         </div>
 
                         <div class="space-y-4">
-                            <h4 class="text-[14px] flex justify-center items-center uppercase font-black text-slate-500 tracking-widest ml-2">Créditos Asociados</h4>
-                            ${renderCreditos(cliente.creditos)}
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-[14px] uppercase font-black text-slate-500 tracking-widest">Créditos Asociados</h4>
+                                <button type="button" data-action="toggle-creditos" data-target="creditos-${cliente.id}" class="inline-flex items-center gap-1 text-xs font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1.5 rounded-full">
+                                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform"></i>
+                                    <span class="js-toggle-text">Ver mas</span>
+                                </button>
+                            </div>
+                            <div id="creditos-${cliente.id}" class="hidden space-y-6">
+                                ${renderCreditos(cliente.creditos)}
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3 mt-4">

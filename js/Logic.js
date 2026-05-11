@@ -23,7 +23,7 @@
 
     const ESTADOS_CREDITO = {
         ACTIVO: "activo",
-        ATRASADO: "atrasado",
+        URGENTE: "urgente",
         FINALIZADO: "finalizado"
     };
 
@@ -122,6 +122,33 @@
         return fecha.toISOString().slice(0, 10);
     }
 
+    function sumarDiasCalendario(fechaISO, diasCalendario) {
+        const fecha = new Date(fechaISO + "T00:00:00");
+
+        if (Number.isNaN(fecha.getTime())) {
+            throw new Error("Fecha invalida.");
+        }
+
+        fecha.setDate(fecha.getDate() + diasCalendario);
+        return fecha.toISOString().slice(0, 10);
+    }
+
+    // Devuelve el lunes (inicio) de la semana calendario lunes-sabado.
+    function inicioSemanaCobro(fechaISO) {
+        const fecha = normalizarFechaCobro(fechaISO);
+        const diaSemana = fecha.getDay();
+        const offset = diaSemana - 1;
+
+        fecha.setDate(fecha.getDate() - offset);
+        return fecha.toISOString().slice(0, 10);
+    }
+
+    // Devuelve el sabado (fin) de la semana calendario lunes-sabado.
+    function finSemanaCobro(fechaISO) {
+        const inicio = inicioSemanaCobro(fechaISO);
+        return sumarDiasCalendario(inicio, 5);
+    }
+
     function compararFechasISO(a, b) {
         // Formato esperado: YYYY-MM-DD
         return String(a || "").localeCompare(String(b || ""));
@@ -146,11 +173,29 @@
         return contador;
     }
 
-    function obtenerNumeroSemanaCobro(fechaInicioISO, fechaReferenciaISO, totalSemanas) {
-        const diasCobroTranscurridos = contarDiasCobroEntre(fechaInicioISO, fechaReferenciaISO);
-        if (diasCobroTranscurridos <= 0) return 1;
+    function contarSemanasCobroCalendario(fechaInicioISO, fechaFinISO) {
+        const inicio = inicioSemanaCobro(fechaInicioISO);
+        const fin = inicioSemanaCobro(fechaFinISO);
 
-        const semana = Math.floor((diasCobroTranscurridos - 1) / 6) + 1;
+        if (compararFechasISO(inicio, fin) > 0) return 1;
+
+        const inicioDate = new Date(inicio + "T00:00:00");
+        const finDate = new Date(fin + "T00:00:00");
+        const diffDias = Math.floor((finDate - inicioDate) / 86400000);
+
+        return Math.floor(diffDias / 7) + 1;
+    }
+
+    function obtenerNumeroSemanaCobro(fechaInicioISO, fechaReferenciaISO, totalSemanas) {
+        const inicioSemana = inicioSemanaCobro(fechaInicioISO);
+        const referenciaSemana = inicioSemanaCobro(fechaReferenciaISO);
+
+        if (compararFechasISO(referenciaSemana, inicioSemana) < 0) return 1;
+
+        const inicioDate = new Date(inicioSemana + "T00:00:00");
+        const refDate = new Date(referenciaSemana + "T00:00:00");
+        const diffDias = Math.floor((refDate - inicioDate) / 86400000);
+        const semana = Math.floor(diffDias / 7) + 1;
         return Math.min(Math.max(1, semana), Math.max(1, totalSemanas));
     }
 
@@ -343,7 +388,7 @@
         if (todasPagas) {
             credito.estado = ESTADOS_CREDITO.FINALIZADO;
         } else if (tieneVencidas) {
-            credito.estado = ESTADOS_CREDITO.ATRASADO;
+            credito.estado = ESTADOS_CREDITO.URGENTE;
         } else {
             credito.estado = ESTADOS_CREDITO.ACTIVO;
         }
@@ -630,6 +675,7 @@
             cuotaId: cuota.id,
             monto,
             fechaPago: texto(payload.fechaPago),
+            fechaPagoHora: fechaActualISO(),
             tipo: cuota.saldoPendiente === 0 ? TIPOS_PAGO.COMPLETO : TIPOS_PAGO.PARCIAL,
             observacion: texto(payload.observacion),
             fechaAlta: fechaActualISO()
@@ -781,11 +827,15 @@
                 ? redondearMoneda((montoPagadoTotal / numero(credito.montoTotal)) * 100)
                 : 0;
 
-        const totalSemanas = Math.max(1, Math.ceil(numero(credito.cantidadCuotas) / 6));
+        const totalSemanas = Math.max(
+            1,
+            contarSemanasCobroCalendario(credito.fechaInicio, credito.fechaFin || credito.fechaInicio)
+        );
         const hoyISO = new Date().toISOString().slice(0, 10);
         const semanaActual = obtenerNumeroSemanaCobro(credito.fechaInicio, hoyISO, totalSemanas);
-        const inicioSemanaActual = sumarDiasCobro(credito.fechaInicio, (semanaActual - 1) * 6);
-        const finSemanaActual = sumarDiasCobro(inicioSemanaActual, 5);
+        const inicioSemanaBase = inicioSemanaCobro(credito.fechaInicio);
+        const inicioSemanaActual = sumarDiasCalendario(inicioSemanaBase, (semanaActual - 1) * 7);
+        const finSemanaActual = sumarDiasCalendario(inicioSemanaActual, 5);
 
         const recaudadoSemanaActual = redondearMoneda(
             pagos
@@ -847,10 +897,10 @@
         let gananciaAcumulada = 0;
         let diferenciaContraAcumulada = 0;
 
-        // Cada semana agrupa 6 dias de cobro (lunes a sabado).
+        // Cada semana es calendario lunes a sabado.
         for (let semana = 1; semana <= totalSemanas; semana += 1) {
-            const inicioSemana = sumarDiasCobro(credito.fechaInicio, (semana - 1) * 6);
-            const finSemana = sumarDiasCobro(inicioSemana, 5);
+            const inicioSemana = sumarDiasCalendario(inicioSemanaBase, (semana - 1) * 7);
+            const finSemana = sumarDiasCalendario(inicioSemana, 5);
 
             const recaudadoSemana = redondearMoneda(
                 pagos
@@ -923,6 +973,7 @@
         const db = cargarDB();
 
         let huboAjustesPorRedondeo = false;
+        let huboAjustesFechas = false;
         db.cuotas.forEach((cuota) => {
             if (cuota.adminID !== admin) return;
 
@@ -934,6 +985,31 @@
         });
 
         if (huboAjustesPorRedondeo) {
+            guardarDB(db);
+        }
+
+        db.creditos.forEach((credito) => {
+            if (credito.adminID !== admin) return;
+            if (!credito.fechaAlta || !credito.fechaInicio) return;
+
+            const fechaAltaISO = String(credito.fechaAlta).slice(0, 10);
+            if (!fechaAltaISO) return;
+
+            if (credito.fechaInicio === fechaAltaISO) {
+                const nuevaFechaInicio = sumarDiasCobro(fechaAltaISO, 1);
+                credito.fechaInicio = nuevaFechaInicio;
+                credito.fechaFin = sumarDiasCobro(nuevaFechaInicio, Number(credito.cantidadCuotas || 1) - 1);
+
+                db.cuotas.forEach((cuota) => {
+                    if (cuota.adminID !== admin || cuota.creditoId !== credito.id) return;
+                    cuota.fechaVencimiento = sumarDiasCobro(credito.fechaInicio, Number(cuota.numero || 1) - 1);
+                });
+
+                huboAjustesFechas = true;
+            }
+        });
+
+        if (huboAjustesFechas) {
             guardarDB(db);
         }
 
