@@ -82,7 +82,9 @@
             return "";
         }
 
-        return cuotas
+        const cuotasOrdenadas = [...cuotas].sort((a, b) => Number(a.numero) - Number(b.numero));
+
+        return cuotasOrdenadas
             .map((cuota) => {
                 const numero = String(cuota.numero || 0).padStart(2, "0");
                 const hoyISO = (() => {

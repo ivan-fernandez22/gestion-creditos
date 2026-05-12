@@ -351,23 +351,35 @@
         botonesFiltro.forEach((boton) => {
             const esActivo = boton.dataset.filtro === filtroEstadoActual;
 
-            boton.classList.remove("bg-oro", "text-white", "shadow-md", "border", "border-slate-200", "bg-white", "text-slate-500", "text-rose-500");
+            boton.classList.remove(
+                "bg-oro",
+                "text-white",
+                "shadow-md",
+                "border",
+                "border-slate-200",
+                "bg-white",
+                "text-slate-500",
+                "text-rose-500",
+                "hover:bg-slate-50",
+                "hover:bg-rose-50",
+                "hover:bg-oro"
+            );
 
             if (esActivo) {
-                boton.classList.add("bg-oro", "text-white", "shadow-md");
+                boton.classList.add("bg-oro", "text-white", "shadow-md", "hover:bg-oro");
             } else {
                 boton.classList.add("bg-white", "border", "border-slate-200");
                 if (boton.dataset.filtro === "urgentes") {
-                    boton.classList.add("text-rose-500");
+                    boton.classList.add("text-rose-500", "hover:bg-rose-50");
                 } else {
-                    boton.classList.add("text-slate-500");
+                    boton.classList.add("text-slate-500", "hover:bg-slate-50");
                 }
             }
         });
     }
 
     // Punto de entrada principal del modulo para pintar todo el listado.
-    function renderClientes(params) {
+    async function renderClientes(params) {
         const {
             contenedorClientes,
             adminId,
@@ -377,8 +389,8 @@
 
         if (!contenedorClientes) return;
 
-        const clientesTotales = window.Logic.obtenerClientesConResumen(adminId);
-        const clientesPorNombre = window.Logic.buscarClientesPorNombre(adminId, filtroTexto);
+        const clientesTotales = await window.Logic.obtenerClientesConResumen(adminId);
+        const clientesPorNombre = await window.Logic.buscarClientesPorNombre(adminId, filtroTexto);
         const clientes = aplicarFiltroEstado(clientesPorNombre, filtroEstado);
 
         if (!clientes.length) {
@@ -445,7 +457,7 @@
                         <div class="space-y-4">
                             <div class="flex items-center justify-between">
                                 <h4 class="text-[14px] uppercase font-black text-slate-500 tracking-widest">Créditos Asociados</h4>
-                                <button type="button" data-action="toggle-creditos" data-target="creditos-${cliente.id}" class="inline-flex items-center gap-1 text-xs font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1.5 rounded-full">
+                                <button type="button" data-action="toggle-creditos" data-target="creditos-${cliente.id}" class="inline-flex items-center gap-1 text-xs font-bold bg-slate-300 text-slate-800 hover:bg-slate-300 px-2.5 py-1.5 rounded-full">
                                     <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform"></i>
                                     <span class="js-toggle-text">Ver mas</span>
                                 </button>

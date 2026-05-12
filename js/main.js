@@ -1,6 +1,6 @@
 "use strict";
 
-(function () {
+(async function () {
     // MAIN.JS actua como orquestador:
     // conecta DOM + modulos de UI + logica de negocio.
     if (!window.Auth) throw new Error("auth.js debe cargarse antes que Main.js");
@@ -8,13 +8,28 @@
     if (!window.UIClientes) throw new Error("renderClientes.js debe cargarse antes que Main.js");
     if (!window.UIPagos) throw new Error("pagosForm.js debe cargarse antes que Main.js");
 
-    const sesionActiva = window.Auth.obtenerSesion();
+    const sesionActiva = await window.Auth.obtenerSesion();
     if (!sesionActiva || !sesionActiva.adminId) {
         window.location.href = "login.html";
         return;
     }
 
     const ADMIN_ID_ACTUAL = sesionActiva.adminId;
+    window.Auth.iniciarVigilanciaSesion(async () => {
+        if (window.Swal && typeof window.Swal.fire === "function") {
+            await window.Swal.fire({
+                icon: "warning",
+                title: "Sesion expirada",
+                text: "Tu sesion expiro. Inicia sesion nuevamente.",
+                confirmButtonText: "Ir al login",
+                confirmButtonColor: "#c5a043"
+            });
+        } else {
+            alert("Tu sesion expiro. Inicia sesion nuevamente.");
+        }
+
+        window.location.href = "login.html";
+    });
 
     // Referencias centralizadas del DOM para evitar buscar nodos repetidamente.
     const refs = {
@@ -44,6 +59,7 @@
 
     let filtroTextoActual = "";
     let filtroEstadoActual = "todos";
+    let creditoDesgloseActualId = "";
 
     function construirMensajeErrorAccionable(msg) {
         const texto = String(msg || "Ocurrió un error inesperado.");
@@ -152,8 +168,8 @@
         return fecha;
     }
 
-    function obtenerPagosAdmin() {
-        const db = window.Logic.cargarDB();
+    async function obtenerPagosAdmin() {
+        const db = await window.Logic.cargarDB(ADMIN_ID_ACTUAL);
         return db.pagos
             .filter((pago) => pago.adminID === ADMIN_ID_ACTUAL && pago.fechaPago)
             .map((pago) => ({
@@ -231,8 +247,8 @@
         };
     }
 
-    function construirGananciasAnio(year) {
-        const pagos = obtenerPagosAdmin();
+    async function construirGananciasAnio(year) {
+        const pagos = await obtenerPagosAdmin();
         const pagosAnio = pagos.filter((pago) => pago.fechaPagoLocal.getFullYear() === year);
         const meses = [];
 
@@ -352,6 +368,7 @@
         if (refs.contenedorDesglose) {
             refs.contenedorDesglose.innerHTML = "";
         }
+        creditoDesgloseActualId = "";
         window.scrollTo({ top: 0, behavior: "auto" });
     }
 
@@ -384,13 +401,15 @@
         }, 1000);
     }
 
-    function abrirDesglose(creditoId) {
+    async function abrirDesglose(creditoId) {
         if (!refs.paginaDesglose || !refs.appPrincipal || !refs.contenedorDesglose || !window.UIDesglose) {
             notificar("No se pudo abrir el desglose. Falta inicializar la UI.", "error", "Error");
             return;
         }
 
-        const clientes = window.Logic.obtenerClientesConResumen(ADMIN_ID_ACTUAL);
+        creditoDesgloseActualId = creditoId;
+
+        const clientes = await window.Logic.obtenerClientesConResumen(ADMIN_ID_ACTUAL);
         let creditoEncontrado = null;
         let clienteEncontrado = null;
 
@@ -424,9 +443,9 @@
         window.scrollTo({ top: 0, behavior: "auto" });
     }
 
-    function renderGananciasAnio(year) {
+    async function renderGananciasAnio(year) {
         if (!refs.contenedorGanancias || !window.UIGanancias) return;
-        const datos = construirGananciasAnio(year);
+        const datos = await construirGananciasAnio(year);
         window.UIGanancias.renderGanancias({
             contenedor: refs.contenedorGanancias,
             year,
@@ -435,14 +454,14 @@
         });
     }
 
-    function abrirGanancias(year) {
+    async function abrirGanancias(year) {
         if (!refs.paginaGanancias || !refs.appPrincipal || !refs.contenedorGanancias || !window.UIGanancias) {
             notificar("No se pudo abrir ganancias. Falta inicializar la UI.", "error", "Error");
             return;
         }
 
         const yearActual = Number(year || new Date().getFullYear());
-        renderGananciasAnio(yearActual);
+        await renderGananciasAnio(yearActual);
         refs.appPrincipal.classList.add("hidden");
         refs.paginaGanancias.classList.remove("hidden");
         window.scrollTo({ top: 0, behavior: "auto" });
@@ -585,8 +604,8 @@
     }
 
     async function abrirModalNuevoPago(cliente) {
-        const creditos = window.Logic
-            .listarCreditosPorClienteId(ADMIN_ID_ACTUAL, cliente.id)
+        const creditos = (await window.Logic
+            .listarCreditosPorClienteId(ADMIN_ID_ACTUAL, cliente.id))
             .filter((credito) => credito.estado !== window.Logic.ESTADOS_CREDITO.FINALIZADO);
 
         if (!creditos.length) {
@@ -637,9 +656,9 @@
                 const inputMonto = document.getElementById("nuevo-pago-monto");
                 const sugerencia = document.getElementById("nuevo-pago-sugerencia");
 
-                function actualizarSugerencia() {
+                async function actualizarSugerencia() {
                     const creditoId = selectCredito.value;
-                    const cuota = window.Logic.obtenerProximaCuotaPendiente(ADMIN_ID_ACTUAL, creditoId);
+                    const cuota = await window.Logic.obtenerProximaCuotaPendiente(ADMIN_ID_ACTUAL, creditoId);
 
                     if (!cuota) {
                         sugerencia.textContent = "No hay cuotas pendientes para este crédito.";
@@ -652,8 +671,10 @@
                     inputMonto.value = cuota.saldoPendiente;
                 }
 
-                selectCredito.addEventListener("change", actualizarSugerencia);
-                actualizarSugerencia();
+                selectCredito.addEventListener("change", () => {
+                    actualizarSugerencia().catch(() => null);
+                });
+                actualizarSugerencia().catch(() => null);
             },
             preConfirm: () => ({
                 creditoId: document.getElementById("nuevo-pago-credito").value,
@@ -668,8 +689,8 @@
     }
 
     // Render principal del listado de clientes.
-    function renderClientes() {
-        window.UIClientes.renderClientes({
+    async function renderClientes() {
+        await window.UIClientes.renderClientes({
             contenedorClientes: refs.contenedorClientes,
             adminId: ADMIN_ID_ACTUAL,
             filtroTexto: filtroTextoActual,
@@ -677,8 +698,73 @@
         });
     }
 
+    function setBotonCargando(boton, cargando, textoCargando) {
+        if (!boton) return;
+        if (cargando) {
+            boton.dataset.htmlOriginal = boton.innerHTML;
+            boton.disabled = true;
+            boton.classList.add("opacity-60", "pointer-events-none");
+            if (textoCargando) {
+                boton.innerHTML = `
+                    <span class="inline-flex items-center gap-2">
+                        <span class="inline-block w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin"></span>
+                        <span>${textoCargando}</span>
+                    </span>
+                `;
+            }
+        } else {
+            const htmlOriginal = boton.dataset.htmlOriginal;
+            if (htmlOriginal) boton.innerHTML = htmlOriginal;
+            delete boton.dataset.htmlOriginal;
+            boton.disabled = false;
+            boton.classList.remove("opacity-60", "pointer-events-none");
+        }
+    }
+
     function actualizarBotonesFiltro() {
         window.UIClientes.actualizarBotonesFiltro(refs.botonesFiltro, filtroEstadoActual);
+    }
+
+    let refreshListadoTimer = null;
+    function programarRefreshListado() {
+        if (refreshListadoTimer) return;
+        refreshListadoTimer = setTimeout(() => {
+            refreshListadoTimer = null;
+            renderClientes().catch(() => null);
+        }, 300);
+    }
+
+    function configurarRealtime() {
+        const supabase = window.SupabaseClient;
+        if (!supabase || !supabase.channel) return;
+
+        const tables = ["clientes", "creditos", "cuotas", "pagos"];
+
+        const channel = supabase.channel(`realtime-admin-${ADMIN_ID_ACTUAL}`);
+        tables.forEach((table) => {
+            channel.on(
+                "postgres_changes",
+                { event: "*", schema: "public", table, filter: `admin_id=eq.${ADMIN_ID_ACTUAL}` },
+                () => {
+                    const desgloseVisible =
+                        creditoDesgloseActualId &&
+                        refs.paginaDesglose &&
+                        !refs.paginaDesglose.classList.contains("hidden");
+
+                    if (desgloseVisible) {
+                        abrirDesglose(creditoDesgloseActualId).catch(() => null);
+                    }
+
+                    if (table === "clientes" || table === "creditos") {
+                        programarRefreshListado();
+                    } else if (!desgloseVisible) {
+                        programarRefreshListado();
+                    }
+                }
+            );
+        });
+
+        channel.subscribe();
     }
 
     function inicializarAccionesListado() {
@@ -687,8 +773,22 @@
         refs.contenedorClientes.addEventListener("click", async (event) => {
             const botonAccion = event.target.closest("button[data-action]");
             if (!botonAccion) return;
+            if (botonAccion.disabled) return;
 
             const accion = botonAccion.dataset.action;
+
+            const accionesConCarga = [
+                "editar-cliente",
+                "editar-credito",
+                "agregar-credito",
+                "agregar-pago",
+                "eliminar-cliente",
+                "eliminar-credito"
+            ];
+
+            if (accionesConCarga.includes(accion)) {
+                setBotonCargando(botonAccion, true, "Guardando...");
+            }
 
             try {
                 if (accion === "editar-cliente") {
@@ -696,9 +796,9 @@
                     const cambios = await abrirModalEditarCliente(cliente);
                     if (!cambios) return;
 
-                    window.Logic.actualizarCliente(ADMIN_ID_ACTUAL, cliente.id, cambios);
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await window.Logic.actualizarCliente(ADMIN_ID_ACTUAL, cliente.id, cambios);
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Cliente actualizado correctamente.", "success", "Listo");
                     return;
                 }
@@ -728,9 +828,9 @@
                     const cambios = await abrirModalEditarCredito(credito);
                     if (!cambios) return;
 
-                    window.Logic.actualizarCredito(ADMIN_ID_ACTUAL, credito.id, cambios);
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await window.Logic.actualizarCredito(ADMIN_ID_ACTUAL, credito.id, cambios);
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Crédito actualizado correctamente.", "success", "Listo");
                     return;
                 }
@@ -740,7 +840,7 @@
                     const datos = await abrirModalNuevoCredito(cliente);
                     if (!datos) return;
 
-                    window.Logic.crearCredito({
+                    await window.Logic.crearCredito({
                         adminID: ADMIN_ID_ACTUAL,
                         dniCliente: cliente.dni,
                         nombre: datos.nombre,
@@ -749,8 +849,8 @@
                         fechaInicio: datos.fechaInicio
                     });
 
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Crédito cargado correctamente.", "success", "Listo");
                     return;
                 }
@@ -760,7 +860,7 @@
                     const datos = await abrirModalNuevoPago(cliente);
                     if (!datos) return;
 
-                    window.Logic.registrarPago({
+                    await window.Logic.registrarPago({
                         adminID: ADMIN_ID_ACTUAL,
                         clienteId: cliente.id,
                         creditoId: datos.creditoId,
@@ -770,8 +870,8 @@
                         observacion: datos.observacion
                     });
 
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Pago registrado correctamente.", "success", "Listo");
                     return;
                 }
@@ -779,7 +879,7 @@
                 if (accion === "ver-desglose") {
                     const creditoId = botonAccion.dataset.creditoId;
                     if (!creditoId) return;
-                    abrirDesglose(creditoId);
+                    await abrirDesglose(creditoId);
                     return;
                 }
 
@@ -794,9 +894,9 @@
 
                     if (!confirmado) return;
 
-                    window.Logic.eliminarCliente(ADMIN_ID_ACTUAL, clienteId);
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await window.Logic.eliminarCliente(ADMIN_ID_ACTUAL, clienteId);
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Cliente eliminado correctamente (incluyendo créditos y pagos asociados).", "success", "Eliminado");
                     return;
                 }
@@ -812,13 +912,17 @@
 
                     if (!confirmado) return;
 
-                    window.Logic.eliminarCredito(ADMIN_ID_ACTUAL, creditoId);
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await window.Logic.eliminarCredito(ADMIN_ID_ACTUAL, creditoId);
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Crédito eliminado correctamente (incluyendo pagos asociados).", "success", "Eliminado");
                 }
             } catch (error) {
                 notificar(error.message, "error", "Error");
+            } finally {
+                if (accionesConCarga.includes(accion)) {
+                    setBotonCargando(botonAccion, false);
+                }
             }
         });
     }
@@ -877,7 +981,7 @@
         refs.paginaGanancias.addEventListener("change", (event) => {
             if (event.target && event.target.id === "ganancias-year") {
                 const year = Number(event.target.value || new Date().getFullYear());
-                renderGananciasAnio(year);
+                renderGananciasAnio(year).catch(() => null);
             }
         });
 
@@ -894,11 +998,13 @@
         adminId: ADMIN_ID_ACTUAL,
         notificar,
         confirmarAccion,
-        onDatosActualizados: renderClientes,
+        onDatosActualizados: async () => {
+            await renderClientes();
+        },
         onCreditoFinalizado: () => {
             filtroEstadoActual = "finalizados";
             actualizarBotonesFiltro();
-            renderClientes();
+            renderClientes().catch(() => null);
         }
     });
 
@@ -931,16 +1037,18 @@
 
         if (refs.btnGanancias) {
             refs.btnGanancias.addEventListener("click", () => {
-                abrirGanancias();
+                abrirGanancias().catch(() => null);
             });
         }
 
         if (refs.formCliente) {
-            refs.formCliente.addEventListener("submit", (event) => {
+            refs.formCliente.addEventListener("submit", async (event) => {
                 event.preventDefault();
+                const botonSubmit = event.submitter || refs.formCliente.querySelector("button[type=\"submit\"]");
+                setBotonCargando(botonSubmit, true, "Guardando...");
 
                 try {
-                    window.Logic.crearCliente({
+                    await window.Logic.crearCliente({
                         adminID: ADMIN_ID_ACTUAL,
                         nombre: document.getElementById("nombre").value,
                         apellido: document.getElementById("apellido").value,
@@ -952,10 +1060,12 @@
                     });
 
                     refs.formCliente.reset();
-                    renderClientes();
+                    await renderClientes();
                     notificar("Cliente cargado correctamente.", "success", "Listo");
                 } catch (error) {
                     notificar(error.message, "error", "Error");
+                } finally {
+                    setBotonCargando(botonSubmit, false);
                 }
             });
         }
@@ -963,6 +1073,8 @@
         if (refs.formCredito) {
             refs.formCredito.addEventListener("submit", async (event) => {
                 event.preventDefault();
+                const botonSubmit = event.submitter || refs.formCredito.querySelector("button[type=\"submit\"]");
+                setBotonCargando(botonSubmit, true, "Guardando...");
 
                 try {
                     const montoCredito = Number(document.getElementById("monto-pedido").value || 0);
@@ -975,7 +1087,7 @@
 
                     if (!confirmado) return;
 
-                    window.Logic.crearCredito({
+                    await window.Logic.crearCredito({
                         adminID: ADMIN_ID_ACTUAL,
                         dniCliente: document.getElementById("dni-credito").value,
                         nombre: document.getElementById("nombre-credito").value,
@@ -985,11 +1097,13 @@
                     });
 
                     refs.formCredito.reset();
-                    renderClientes();
-                    pagosController.cargarOpcionesCreditoPago();
+                    await renderClientes();
+                    pagosController.cargarOpcionesCreditoPago().catch(() => null);
                     notificar("Credito cargado correctamente.", "success", "Listo");
                 } catch (error) {
                     notificar(error.message, "error", "Error");
+                } finally {
+                    setBotonCargando(botonSubmit, false);
                 }
             });
         }
@@ -1003,7 +1117,7 @@
         if (refs.buscador) {
             refs.buscador.addEventListener("input", (event) => {
                 filtroTextoActual = event.target.value;
-                renderClientes();
+                renderClientes().catch(() => null);
             });
         }
 
@@ -1011,7 +1125,7 @@
             boton.addEventListener("click", () => {
                 filtroEstadoActual = boton.dataset.filtro || "todos";
                 actualizarBotonesFiltro();
-                renderClientes();
+                renderClientes().catch(() => null);
             });
         });
     }
@@ -1019,13 +1133,13 @@
     // Expuesto para compatibilidad con llamadas globales antiguas.
     window.filtrarClientes = function filtrarClientes(valor) {
         filtroTextoActual = valor;
-        renderClientes();
+        renderClientes().catch(() => null);
     };
 
     // Expuesto para compatibilidad con llamadas globales antiguas.
     window.verDesglose = function verDesglose(creditoId) {
         if (creditoId) {
-            abrirDesglose(creditoId);
+            abrirDesglose(creditoId).catch(() => null);
             return;
         }
         notificar("Selecciona un credito para ver el desglose.", "info", "Aviso");
@@ -1034,7 +1148,8 @@
     // Secuencia de arranque de la SPA.
     iniciarEventos();
     actualizarBotonesFiltro();
-    renderClientes();
-    pagosController.actualizarInfoCuotaPendiente();
+    renderClientes().catch(() => null);
+    pagosController.actualizarInfoCuotaPendiente().catch(() => null);
+    configurarRealtime();
 })();
 

@@ -25,8 +25,8 @@
             }).format(Number(valor || 0));
         }
 
-        function obtenerCuotaDeFormulario(creditoId, nroCuota) {
-            const db = window.Logic.cargarDB();
+        async function obtenerCuotaDeFormulario(creditoId, nroCuota) {
+            const db = await window.Logic.cargarDB(adminId);
             return (
                 db.cuotas.find(
                     (cuota) =>
@@ -54,7 +54,7 @@
         }
 
         // Lee credito + cuota del formulario y muestra saldo de forma dinamica.
-        function actualizarInfoCuotaPendiente() {
+        async function actualizarInfoCuotaPendiente() {
             if (!refs.selectCreditoPago || !refs.nroCuota) return;
 
             const creditoId = refs.selectCreditoPago.value;
@@ -70,7 +70,7 @@
                 return;
             }
 
-            const cuota = obtenerCuotaDeFormulario(creditoId, nroCuota);
+            const cuota = await obtenerCuotaDeFormulario(creditoId, nroCuota);
             if (!cuota) {
                 setInfoCuota(`No existe la cuota ${nroCuota} para este crédito.`, "error");
                 return;
@@ -88,78 +88,78 @@
         }
 
         // Sugiere la proxima cuota pendiente segun el credito seleccionado.
-        function actualizarCuotaSugerida() {
+        async function actualizarCuotaSugerida() {
             if (!refs.nroCuota || !refs.selectCreditoPago) return;
 
             const creditoId = refs.selectCreditoPago.value;
             if (!creditoId) {
                 refs.nroCuota.value = "";
                 refs.nroCuota.placeholder = "N° Cuota (Auto sugerida)";
-                actualizarInfoCuotaPendiente();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
-            const proximaCuota = window.Logic.obtenerProximaCuotaPendiente(adminId, creditoId);
+            const proximaCuota = await window.Logic.obtenerProximaCuotaPendiente(adminId, creditoId);
             if (!proximaCuota) {
                 refs.nroCuota.value = "";
                 refs.nroCuota.placeholder = "Sin cuotas pendientes";
-                actualizarInfoCuotaPendiente();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
             refs.nroCuota.value = String(proximaCuota.numero);
             refs.nroCuota.placeholder = "N° Cuota (Auto sugerida)";
-            actualizarInfoCuotaPendiente();
+            await actualizarInfoCuotaPendiente();
         }
 
         // Cuando hay cliente seleccionado, carga solo sus creditos activos.
-        function cargarCreditosPorClienteSeleccionado() {
+        async function cargarCreditosPorClienteSeleccionado() {
             refs.selectCreditoPago.innerHTML = "";
 
             if (!clientePagoSeleccionadoId) {
                 refs.selectCreditoPago.innerHTML = '<option value="">Selecciona primero el cliente correcto</option>';
                 refs.selectCreditoPago.disabled = true;
-                actualizarCuotaSugerida();
-                actualizarInfoCuotaPendiente();
+                await actualizarCuotaSugerida();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
-            const creditos = window.Logic
-                .listarCreditosPorClienteId(adminId, clientePagoSeleccionadoId)
+            const creditos = (await window.Logic
+                .listarCreditosPorClienteId(adminId, clientePagoSeleccionadoId))
                 .filter((credito) => credito.estado !== "finalizado");
 
             if (!creditos.length) {
                 refs.selectCreditoPago.innerHTML = '<option value="">No hay créditos activos para ese cliente (carga uno nuevo para continuar)</option>';
                 refs.selectCreditoPago.disabled = true;
-                actualizarCuotaSugerida();
-                actualizarInfoCuotaPendiente();
+                await actualizarCuotaSugerida();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
             refs.selectCreditoPago.disabled = false;
             refs.selectCreditoPago.innerHTML = '<option value="">Selecciona un credito</option>';
 
-            creditos.forEach((credito) => {
-                const proximaCuota = window.Logic.obtenerProximaCuotaPendiente(adminId, credito.id);
+            for (const credito of creditos) {
+                const proximaCuota = await window.Logic.obtenerProximaCuotaPendiente(adminId, credito.id);
                 const option = document.createElement("option");
                 option.value = credito.id;
                 option.textContent = `${credito.nombre} | Plan ${credito.plan} dias | Próx. cuota: ${proximaCuota ? proximaCuota.numero : "-"}`;
                 refs.selectCreditoPago.appendChild(option);
-            });
+            }
 
             refs.selectCreditoPago.selectedIndex = 1;
-            actualizarCuotaSugerida();
-            actualizarInfoCuotaPendiente();
+            await actualizarCuotaSugerida();
+            await actualizarInfoCuotaPendiente();
         }
 
         // Resuelve coincidencias de nombre/apellido y habilita selector para homonimos.
-        function cargarOpcionesCreditoPago() {
+        async function cargarOpcionesCreditoPago() {
             if (!refs.selectCreditoPago || !refs.nombrePago || !refs.apellidoPago) return;
 
             const nombre = refs.nombrePago.value;
             const apellido = refs.apellidoPago.value;
 
-            const resultado = window.Logic.listarCreditosPorNombreApellido(
+            const resultado = await window.Logic.listarCreditosPorNombreApellido(
                 adminId,
                 nombre,
                 apellido
@@ -176,8 +176,8 @@
                     refs.selectClientePago.disabled = true;
                     refs.selectClientePago.innerHTML = '<option value="">Selecciona cliente por DNI/teléfono...</option>';
                 }
-                actualizarCuotaSugerida();
-                actualizarInfoCuotaPendiente();
+                await actualizarCuotaSugerida();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
@@ -198,8 +198,8 @@
                     });
                 }
 
-                actualizarCuotaSugerida();
-                actualizarInfoCuotaPendiente();
+                await actualizarCuotaSugerida();
+                await actualizarInfoCuotaPendiente();
                 return;
             }
 
@@ -210,11 +210,11 @@
             }
 
             clientePagoSeleccionadoId = resultado.cliente ? resultado.cliente.id : "";
-            cargarCreditosPorClienteSeleccionado();
+            await cargarCreditosPorClienteSeleccionado();
         }
 
         // Vuelve el formulario de pagos al estado inicial.
-        function resetearFormularioPago() {
+        async function resetearFormularioPago() {
             if (!refs.formPago) return;
 
             refs.formPago.reset();
@@ -230,7 +230,7 @@
                 refs.nroCuota.value = "";
                 refs.nroCuota.placeholder = "N° Cuota (Auto sugerida)";
             }
-            actualizarInfoCuotaPendiente();
+            await actualizarInfoCuotaPendiente();
         }
 
         // Submit principal: registra pago y refresca la pantalla via callbacks.
@@ -239,6 +239,18 @@
 
             refs.formPago.addEventListener("submit", async (event) => {
                 event.preventDefault();
+                const botonSubmit = event.submitter || refs.formPago.querySelector("button[type=\"submit\"]");
+                if (botonSubmit) {
+                    botonSubmit.dataset.htmlOriginal = botonSubmit.innerHTML;
+                    botonSubmit.disabled = true;
+                    botonSubmit.classList.add("opacity-60", "pointer-events-none");
+                    botonSubmit.innerHTML = `
+                        <span class="inline-flex items-center gap-2">
+                            <span class="inline-block w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin"></span>
+                            <span>Guardando...</span>
+                        </span>
+                    `;
+                }
 
                 try {
                     const creditoSeleccionado = refs.selectCreditoPago.options[refs.selectCreditoPago.selectedIndex];
@@ -255,7 +267,7 @@
                         if (!confirmado) return;
                     }
 
-                    const resultado = window.Logic.registrarPago({
+                    const resultado = await window.Logic.registrarPago({
                         adminID: adminId,
                         clienteId: clientePagoSeleccionadoId,
                         nombreCliente: document.getElementById("nombre-pago").value,
@@ -266,7 +278,7 @@
                         fechaPago: document.getElementById("fecha-pago").value
                     });
 
-                    resetearFormularioPago();
+                    await resetearFormularioPago();
 
                     if (typeof onDatosActualizados === "function") {
                         onDatosActualizados();
@@ -286,6 +298,14 @@
                     }
                 } catch (error) {
                     notificar(error.message, "error", "Error");
+                } finally {
+                    if (botonSubmit) {
+                        const htmlOriginal = botonSubmit.dataset.htmlOriginal;
+                        if (htmlOriginal) botonSubmit.innerHTML = htmlOriginal;
+                        delete botonSubmit.dataset.htmlOriginal;
+                        botonSubmit.disabled = false;
+                        botonSubmit.classList.remove("opacity-60", "pointer-events-none");
+                    }
                 }
             });
         }
@@ -295,30 +315,44 @@
             registrarEventoSubmitPago();
 
             if (refs.nombrePago) {
-                refs.nombrePago.addEventListener("input", cargarOpcionesCreditoPago);
-                refs.nombrePago.addEventListener("blur", cargarOpcionesCreditoPago);
+                refs.nombrePago.addEventListener("input", () => {
+                    cargarOpcionesCreditoPago().catch(() => null);
+                });
+                refs.nombrePago.addEventListener("blur", () => {
+                    cargarOpcionesCreditoPago().catch(() => null);
+                });
             }
 
             if (refs.apellidoPago) {
-                refs.apellidoPago.addEventListener("input", cargarOpcionesCreditoPago);
-                refs.apellidoPago.addEventListener("blur", cargarOpcionesCreditoPago);
+                refs.apellidoPago.addEventListener("input", () => {
+                    cargarOpcionesCreditoPago().catch(() => null);
+                });
+                refs.apellidoPago.addEventListener("blur", () => {
+                    cargarOpcionesCreditoPago().catch(() => null);
+                });
             }
 
             if (refs.selectClientePago) {
                 refs.selectClientePago.addEventListener("change", () => {
                     clientePagoSeleccionadoId = refs.selectClientePago.value || "";
-                    cargarCreditosPorClienteSeleccionado();
+                    cargarCreditosPorClienteSeleccionado().catch(() => null);
                 });
             }
 
             if (refs.selectCreditoPago) {
-                refs.selectCreditoPago.addEventListener("change", actualizarCuotaSugerida);
+                refs.selectCreditoPago.addEventListener("change", () => {
+                    actualizarCuotaSugerida().catch(() => null);
+                });
             }
 
             if (refs.nroCuota) {
                 refs.nroCuota.readOnly = false;
-                refs.nroCuota.addEventListener("input", actualizarInfoCuotaPendiente);
-                refs.nroCuota.addEventListener("blur", actualizarInfoCuotaPendiente);
+                refs.nroCuota.addEventListener("input", () => {
+                    actualizarInfoCuotaPendiente().catch(() => null);
+                });
+                refs.nroCuota.addEventListener("blur", () => {
+                    actualizarInfoCuotaPendiente().catch(() => null);
+                });
             }
         }
 

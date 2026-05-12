@@ -200,8 +200,13 @@
     }
 
     // -----------------------------
-    // Persistencia en localStorage
+    // Persistencia en Supabase
     // -----------------------------
+
+    const CACHE_TTL_MS = 15000;
+    let cacheAdminId = "";
+    let cacheTimestamp = 0;
+    let cacheData = null;
 
     function crearDBVacia() {
         return {
@@ -213,26 +218,235 @@
         };
     }
 
-    function cargarDB() {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return crearDBVacia();
+    function getSupabaseClient() {
+        const supabase = window.SupabaseClient;
+        if (!supabase) {
+            throw new Error("Supabase no esta configurado. Revisa js/supabaseClient.js");
+        }
+        return supabase;
+    }
 
-        try {
-            const data = JSON.parse(raw);
-            return {
-                version: data.version || SCHEMA_VERSION,
-                clientes: Array.isArray(data.clientes) ? data.clientes : [],
-                creditos: Array.isArray(data.creditos) ? data.creditos : [],
-                cuotas: Array.isArray(data.cuotas) ? data.cuotas : [],
-                pagos: Array.isArray(data.pagos) ? data.pagos : []
-            };
-        } catch {
-            return crearDBVacia();
+    function describirErrorSupabase(error, contexto) {
+        if (!error) return contexto;
+        const mensaje = error.message || "Error inesperado en Supabase.";
+        const codigo = error.code || "";
+        const detalle = String(error.details || "").toLowerCase();
+        const mensajeLower = mensaje.toLowerCase();
+
+        if (codigo === "23505") {
+            if (detalle.includes("clientes_admin_dni_unique") || mensajeLower.includes("dni")) {
+                return `${contexto}. Ya existe un cliente con ese DNI.`;
+            }
+            return `${contexto}. Ya existe un registro con esos datos.`;
+        }
+        if (codigo === "42501") {
+            return `${contexto}. No tienes permisos para esta accion.`;
+        }
+        if (mensajeLower.includes("jwt") || mensajeLower.includes("token")) {
+            return `${contexto}. Tu sesion expiro, vuelve a iniciar sesion.`;
+        }
+        if (mensajeLower.includes("timeout") || mensajeLower.includes("time out")) {
+            return `${contexto}. Se agoto el tiempo de espera. Intenta nuevamente.`;
+        }
+        if (mensajeLower.includes("network") || mensajeLower.includes("failed to fetch")) {
+            return `${contexto}. Hay un problema de conexion. Verifica tu internet.`;
+        }
+        if (mensajeLower.includes("permission denied") || mensajeLower.includes("rls")) {
+            return `${contexto}. Acceso denegado por permisos de seguridad.`;
+        }
+        if (mensajeLower.includes("foreign key") || mensajeLower.includes("violates foreign key")) {
+            return `${contexto}. Hay referencias pendientes asociadas.`;
+        }
+
+        return `${contexto}. ${mensaje}`;
+    }
+
+    function setCache(adminId, data) {
+        cacheAdminId = adminId;
+        cacheTimestamp = Date.now();
+        cacheData = data;
+    }
+
+    function invalidateCache(adminId) {
+        if (!adminId || adminId === cacheAdminId) {
+            cacheAdminId = "";
+            cacheTimestamp = 0;
+            cacheData = null;
         }
     }
 
-    function guardarDB(db) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    function mapClienteFromDb(row) {
+        return {
+            id: row.id,
+            adminID: row.admin_id,
+            nombre: row.nombre,
+            apellido: row.apellido,
+            dni: row.dni,
+            telefono: row.telefono,
+            direccionReal: row.direccion_real,
+            direccionComercio: row.direccion_comercio,
+            rubro: row.rubro,
+            estado: row.estado,
+            fechaAlta: row.fecha_alta
+        };
+    }
+
+    function mapCreditoFromDb(row) {
+        return {
+            id: row.id,
+            adminID: row.admin_id,
+            clienteId: row.cliente_id,
+            nombre: row.nombre,
+            plan: row.plan,
+            tasaInteres: row.tasa_interes,
+            montoSolicitado: row.monto_solicitado,
+            montoTotal: row.monto_total,
+            valorCuota: row.valor_cuota,
+            cantidadCuotas: row.cantidad_cuotas,
+            fechaInicio: row.fecha_inicio,
+            fechaFin: row.fecha_fin,
+            estado: row.estado,
+            fechaAlta: row.fecha_alta
+        };
+    }
+
+    function mapCuotaFromDb(row) {
+        return {
+            id: row.id,
+            adminID: row.admin_id,
+            creditoId: row.credito_id,
+            numero: row.numero,
+            montoEsperado: row.monto_esperado,
+            montoPagado: row.monto_pagado,
+            saldoPendiente: row.saldo_pendiente,
+            fechaVencimiento: row.fecha_vencimiento,
+            estado: row.estado,
+            fechaAlta: row.fecha_alta
+        };
+    }
+
+    function mapPagoFromDb(row) {
+        return {
+            id: row.id,
+            adminID: row.admin_id,
+            creditoId: row.credito_id,
+            cuotaId: row.cuota_id,
+            monto: row.monto,
+            fechaPago: row.fecha_pago,
+            fechaPagoHora: row.fecha_pago_hora || row.fecha_alta || "",
+            tipo: row.tipo,
+            observacion: row.observacion,
+            fechaAlta: row.fecha_alta
+        };
+    }
+
+    function mapClienteToDb(cliente) {
+        return {
+            id: cliente.id,
+            admin_id: cliente.adminID,
+            nombre: cliente.nombre,
+            apellido: cliente.apellido,
+            dni: cliente.dni,
+            telefono: cliente.telefono,
+            direccion_real: cliente.direccionReal,
+            direccion_comercio: cliente.direccionComercio,
+            rubro: cliente.rubro,
+            estado: cliente.estado,
+            fecha_alta: cliente.fechaAlta
+        };
+    }
+
+    function mapCreditoToDb(credito) {
+        return {
+            id: credito.id,
+            admin_id: credito.adminID,
+            cliente_id: credito.clienteId,
+            nombre: credito.nombre,
+            plan: credito.plan,
+            tasa_interes: credito.tasaInteres,
+            monto_solicitado: credito.montoSolicitado,
+            monto_total: credito.montoTotal,
+            valor_cuota: credito.valorCuota,
+            cantidad_cuotas: credito.cantidadCuotas,
+            fecha_inicio: credito.fechaInicio,
+            fecha_fin: credito.fechaFin,
+            estado: credito.estado,
+            fecha_alta: credito.fechaAlta
+        };
+    }
+
+    function mapCuotaToDb(cuota) {
+        return {
+            id: cuota.id,
+            admin_id: cuota.adminID,
+            credito_id: cuota.creditoId,
+            numero: cuota.numero,
+            monto_esperado: cuota.montoEsperado,
+            monto_pagado: cuota.montoPagado,
+            saldo_pendiente: cuota.saldoPendiente,
+            fecha_vencimiento: cuota.fechaVencimiento,
+            estado: cuota.estado,
+            fecha_alta: cuota.fechaAlta
+        };
+    }
+
+    function mapPagoToDb(pago) {
+        return {
+            id: pago.id,
+            admin_id: pago.adminID,
+            credito_id: pago.creditoId,
+            cuota_id: pago.cuotaId,
+            monto: pago.monto,
+            fecha_pago: pago.fechaPago,
+            tipo: pago.tipo,
+            observacion: pago.observacion,
+            fecha_alta: pago.fechaAlta
+        };
+    }
+
+    async function cargarDB(adminID) {
+        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        if (!admin) return crearDBVacia();
+
+        if (cacheData && cacheAdminId === admin && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
+            return cacheData;
+        }
+
+        const supabase = getSupabaseClient();
+        const [clientesRes, creditosRes, cuotasRes, pagosRes] = await Promise.all([
+            supabase.from("clientes").select("*").eq("admin_id", admin),
+            supabase.from("creditos").select("*").eq("admin_id", admin),
+            supabase.from("cuotas").select("*").eq("admin_id", admin),
+            supabase.from("pagos").select("*").eq("admin_id", admin)
+        ]);
+
+        if (clientesRes.error) {
+            throw new Error(describirErrorSupabase(clientesRes.error, "No se pudieron leer los clientes"));
+        }
+        if (creditosRes.error) {
+            throw new Error(describirErrorSupabase(creditosRes.error, "No se pudieron leer los creditos"));
+        }
+        if (cuotasRes.error) {
+            throw new Error(describirErrorSupabase(cuotasRes.error, "No se pudieron leer las cuotas"));
+        }
+        if (pagosRes.error) {
+            throw new Error(describirErrorSupabase(pagosRes.error, "No se pudieron leer los pagos"));
+        }
+
+        const data = {
+            version: SCHEMA_VERSION,
+            clientes: (clientesRes.data || []).map(mapClienteFromDb),
+            creditos: (creditosRes.data || []).map(mapCreditoFromDb),
+            cuotas: (cuotasRes.data || []).map(mapCuotaFromDb),
+            pagos: (pagosRes.data || []).map(mapPagoFromDb)
+        };
+
+        setCache(admin, data);
+        return data;
+    }
+
+    function guardarDB() {
+        invalidateCache();
     }
 
     function buscarClientePorDNI(db, adminID, dni) {
@@ -257,9 +471,9 @@
         });
     }
 
-    function listarCreditosPorNombreApellido(adminID, nombre, apellido) {
+    async function listarCreditosPorNombreApellido(adminID, nombre, apellido) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
         const coincidencias = buscarClientesPorNombreApellido(db, admin, nombre, apellido);
 
         if (!coincidencias.length) {
@@ -302,10 +516,10 @@
         };
     }
 
-    function listarCreditosPorClienteId(adminID, clienteId) {
+    async function listarCreditosPorClienteId(adminID, clienteId) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const id = texto(clienteId);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
 
         if (!id) return [];
 
@@ -363,10 +577,10 @@
                 return;
             }
 
-            if (cuota.fechaVencimiento && cuota.fechaVencimiento < hoy) {
-                cuota.estado = ESTADOS_CUOTA.VENCIDA;
-            } else if (cuota.saldoPendiente > 0 && cuota.montoPagado > 0) {
+            if (cuota.saldoPendiente > 0 && cuota.montoPagado > 0) {
                 cuota.estado = ESTADOS_CUOTA.PARCIAL;
+            } else if (cuota.fechaVencimiento && cuota.fechaVencimiento < hoy) {
+                cuota.estado = ESTADOS_CUOTA.VENCIDA;
             } else {
                 cuota.estado = ESTADOS_CUOTA.PENDIENTE;
             }
@@ -403,7 +617,7 @@
 
 
 // CREAR AL CLIENTE: valida que el DNI no exista para el mismo adminID.
-    function crearCliente(payload) {
+    async function crearCliente(payload) {
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
         const dni = normalizarDNI(payload.dni);
         const nombre = texto(payload.nombre);
@@ -417,10 +631,20 @@
         if (!telefono) throw new Error("El teléfono es obligatorio.");
         if (!direccionReal) throw new Error("La dirección real es obligatoria.");
 
-        const db = cargarDB();
-        const clienteExistente = buscarClientePorDNI(db, adminID, dni);
+        const supabase = getSupabaseClient();
+        const { data: existente, error: errorExistente } = await supabase
+            .from("clientes")
+            .select("id")
+            .eq("admin_id", adminID)
+            .eq("dni", dni)
+            .limit(1)
+            .maybeSingle();
 
-        if (clienteExistente) {
+        if (errorExistente) {
+            throw new Error(describirErrorSupabase(errorExistente, "No se pudo validar el DNI del cliente"));
+        }
+
+        if (existente) {
             throw new Error("Ya existe un cliente con ese DNI para este administrador.");
         }
 
@@ -438,84 +662,94 @@
             fechaAlta: fechaActualISO()
         };
 
-        db.clientes.push(cliente);
-        guardarDB(db);
+        const { error: errorInsert } = await supabase.from("clientes").insert(mapClienteToDb(cliente));
+        if (errorInsert) {
+            throw new Error(describirErrorSupabase(errorInsert, "No se pudo guardar el cliente"));
+        }
 
+        invalidateCache(adminID);
         return cliente;
     }
 
-    function actualizarCliente(adminID, clienteId, cambios) {
+    async function actualizarCliente(adminID, clienteId, cambios) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const id = texto(clienteId);
 
         if (!id) throw new Error("No existe el cliente seleccionado para editar.");
 
-        const db = cargarDB();
-        const idx = db.clientes.findIndex(
-            (cliente) => cliente.adminID === admin && cliente.id === id
-        );
-
-        if (idx === -1) throw new Error("No existe el cliente seleccionado para editar.");
-
-        const actual = db.clientes[idx];
-        const actualizado = { ...actual };
+        const supabase = getSupabaseClient();
+        const cambiosDb = {};
 
         if (Object.prototype.hasOwnProperty.call(cambios, "dni")) {
             const dni = normalizarDNI(cambios.dni);
             if (!dni) throw new Error("El DNI es obligatorio.");
-            const existente = db.clientes.find(
-                (cliente) =>
-                    cliente.adminID === admin &&
-                    cliente.id !== id &&
-                    normalizarDNI(cliente.dni) === dni
-            );
+            const { data: existente, error: errorExistente } = await supabase
+                .from("clientes")
+                .select("id")
+                .eq("admin_id", admin)
+                .eq("dni", dni)
+                .neq("id", id)
+                .limit(1)
+                .maybeSingle();
+
+            if (errorExistente) {
+                throw new Error(describirErrorSupabase(errorExistente, "No se pudo validar el DNI"));
+            }
             if (existente) {
                 throw new Error("Ya existe un cliente con ese DNI para este administrador.");
             }
-            actualizado.dni = dni;
+            cambiosDb.dni = dni;
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "nombre")) {
             const nombre = texto(cambios.nombre);
             if (!nombre) throw new Error("El nombre es obligatorio.");
-            actualizado.nombre = nombre;
+            cambiosDb.nombre = nombre;
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "apellido")) {
             const apellido = texto(cambios.apellido);
             if (!apellido) throw new Error("El apellido es obligatorio.");
-            actualizado.apellido = apellido;
+            cambiosDb.apellido = apellido;
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "telefono")) {
             const telefono = texto(cambios.telefono);
             if (!telefono) throw new Error("El teléfono es obligatorio.");
-            actualizado.telefono = telefono;
+            cambiosDb.telefono = telefono;
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "direccionReal")) {
             const direccionReal = texto(cambios.direccionReal);
             if (!direccionReal) throw new Error("La dirección real es obligatoria.");
-            actualizado.direccionReal = direccionReal;
+            cambiosDb.direccion_real = direccionReal;
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "direccionComercio")) {
-            actualizado.direccionComercio = texto(cambios.direccionComercio);
+            cambiosDb.direccion_comercio = texto(cambios.direccionComercio);
         }
 
         if (Object.prototype.hasOwnProperty.call(cambios, "rubro")) {
-            actualizado.rubro = texto(cambios.rubro);
+            cambiosDb.rubro = texto(cambios.rubro);
         }
 
-        db.clientes[idx] = actualizado;
-        guardarDB(db);
+        const { error: errorUpdate } = await supabase
+            .from("clientes")
+            .update(cambiosDb)
+            .eq("id", id)
+            .eq("admin_id", admin);
 
-        return actualizado;
+        if (errorUpdate) {
+            throw new Error(describirErrorSupabase(errorUpdate, "No se pudo actualizar el cliente"));
+        }
+
+        invalidateCache(admin);
+        return { id, adminID: admin, ...cambios };
     }
 
 
 // CREAR AL CREDITO: valida que el cliente exista y calcula montos y cuotas.
-    function crearCredito(payload) {
+    async function crearCredito(payload) {
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
         const plan = numero(payload.plan);
         const montoSolicitado = redondearMoneda(payload.montoSolicitado);
@@ -527,8 +761,19 @@
         if (montoSolicitado <= 0) throw new Error("El monto solicitado debe ser mayor a 0.");
         if (!texto(payload.fechaInicio)) throw new Error("La fecha de inicio es obligatoria.");
 
-        const db = cargarDB();
-        const cliente = buscarClientePorDNI(db, adminID, payload.dniCliente);
+        const supabase = getSupabaseClient();
+        const dni = normalizarDNI(payload.dniCliente);
+        const { data: cliente, error: errorCliente } = await supabase
+            .from("clientes")
+            .select("id,admin_id,dni")
+            .eq("admin_id", adminID)
+            .eq("dni", dni)
+            .limit(1)
+            .maybeSingle();
+
+        if (errorCliente) {
+            throw new Error(describirErrorSupabase(errorCliente, "No se pudo validar el cliente"));
+        }
         if (!cliente) throw new Error("No existe cliente para ese DNI.");
 
         const fechaInicioNormalizada = sumarDiasCobro(texto(payload.fechaInicio), 1);
@@ -577,47 +822,56 @@
             });
         }
 
-        db.creditos.push(credito);
-        db.cuotas.push(...cuotas);
-        guardarDB(db);
+        const { error: errorCredito } = await supabase.from("creditos").insert(mapCreditoToDb(credito));
+        if (errorCredito) {
+            throw new Error(describirErrorSupabase(errorCredito, "No se pudo guardar el credito"));
+        }
+
+        const { error: errorCuotas } = await supabase
+            .from("cuotas")
+            .insert(cuotas.map(mapCuotaToDb));
+        if (errorCuotas) {
+            throw new Error(describirErrorSupabase(errorCuotas, "No se pudieron guardar las cuotas"));
+        }
+
+        invalidateCache(adminID);
 
         return { credito, cuotas };
     }
 
-    function actualizarCredito(adminID, creditoId, cambios) {
+    async function actualizarCredito(adminID, creditoId, cambios) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const id = texto(creditoId);
 
         if (!id) throw new Error("No existe el crédito seleccionado para editar.");
 
-        const db = cargarDB();
-        const idx = db.creditos.findIndex(
-            (credito) => credito.adminID === admin && credito.id === id
-        );
-
-        if (idx === -1) throw new Error("No existe el crédito seleccionado para editar.");
-
-        const actual = db.creditos[idx];
-        const actualizado = { ...actual };
-
         if (Object.prototype.hasOwnProperty.call(cambios, "nombre")) {
             const nombre = texto(cambios.nombre);
             if (!nombre) throw new Error("El nombre del crédito es obligatorio.");
-            actualizado.nombre = nombre;
+            const supabase = getSupabaseClient();
+            const { error } = await supabase
+                .from("creditos")
+                .update({ nombre })
+                .eq("id", id)
+                .eq("admin_id", admin);
+
+            if (error) {
+                throw new Error(describirErrorSupabase(error, "No se pudo actualizar el credito"));
+            }
+
+            invalidateCache(admin);
+            return { id, adminID: admin, nombre };
         }
 
-        db.creditos[idx] = actualizado;
-        guardarDB(db);
-
-        return actualizado;
+        return { id, adminID: admin };
     }
 
 
 
 // REGISTRAR PAGO: valida que exista el cliente, credito y cuota. Actualiza montos y estados.
-    function registrarPago(payload) {
+    async function registrarPago(payload) {
         const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
-        const db = cargarDB();
+        const db = await cargarDB(adminID);
 
         if (!texto(payload.creditoId)) throw new Error("Debes seleccionar un crédito para registrar el pago.");
         if (!texto(payload.fechaPago)) throw new Error("La fecha de pago es obligatoria.");
@@ -684,16 +938,44 @@
         db.pagos.push(pago);
 
         const creditoActualizado = actualizarEstadoCredito(db, creditoId, adminID);
-        guardarDB(db);
 
+        const supabase = getSupabaseClient();
+        const cuotasCredito = db.cuotas.filter(
+            (item) => item.adminID === adminID && item.creditoId === creditoId
+        );
+
+        const { error: errorCuotas } = await supabase
+            .from("cuotas")
+            .upsert(cuotasCredito.map(mapCuotaToDb), { onConflict: "id" });
+
+        if (errorCuotas) {
+            throw new Error(describirErrorSupabase(errorCuotas, "No se pudieron actualizar las cuotas"));
+        }
+
+        const { error: errorCredito } = await supabase
+            .from("creditos")
+            .update({ estado: creditoActualizado.estado })
+            .eq("id", creditoId)
+            .eq("admin_id", adminID);
+
+        if (errorCredito) {
+            throw new Error(describirErrorSupabase(errorCredito, "No se pudo actualizar el credito"));
+        }
+
+        const { error: errorPago } = await supabase.from("pagos").insert(mapPagoToDb(pago));
+        if (errorPago) {
+            throw new Error(describirErrorSupabase(errorPago, "No se pudo registrar el pago"));
+        }
+
+        setCache(adminID, db);
         return { pago, cuota, credito: creditoActualizado };
     }
 
     // ELIMINAR CREDITO: borra el credito y sus cuotas/pagos asociados.
-    function eliminarCredito(adminID, creditoId) {
+    async function eliminarCredito(adminID, creditoId) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const idCredito = texto(creditoId);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
 
         const credito = db.creditos.find(
             (item) => item.adminID === admin && item.id === idCredito
@@ -702,35 +984,52 @@
             throw new Error("No existe el crédito seleccionado para eliminar.");
         }
 
-        const creditosAntes = db.creditos.length;
-        const cuotasAntes = db.cuotas.length;
-        const pagosAntes = db.pagos.length;
+        const supabase = getSupabaseClient();
+        const { error: errorPagos } = await supabase
+            .from("pagos")
+            .delete()
+            .eq("admin_id", admin)
+            .eq("credito_id", idCredito);
 
-        db.creditos = db.creditos.filter(
-            (item) => !(item.adminID === admin && item.id === idCredito)
-        );
-        db.cuotas = db.cuotas.filter(
-            (cuota) => !(cuota.adminID === admin && cuota.creditoId === idCredito)
-        );
-        db.pagos = db.pagos.filter(
-            (pago) => !(pago.adminID === admin && pago.creditoId === idCredito)
-        );
+        if (errorPagos) {
+            throw new Error(describirErrorSupabase(errorPagos, "No se pudieron eliminar los pagos"));
+        }
 
-        guardarDB(db);
+        const { error: errorCuotas } = await supabase
+            .from("cuotas")
+            .delete()
+            .eq("admin_id", admin)
+            .eq("credito_id", idCredito);
+
+        if (errorCuotas) {
+            throw new Error(describirErrorSupabase(errorCuotas, "No se pudieron eliminar las cuotas"));
+        }
+
+        const { error: errorCredito } = await supabase
+            .from("creditos")
+            .delete()
+            .eq("admin_id", admin)
+            .eq("id", idCredito);
+
+        if (errorCredito) {
+            throw new Error(describirErrorSupabase(errorCredito, "No se pudo eliminar el credito"));
+        }
+
+        invalidateCache(admin);
 
         return {
             creditoId: idCredito,
-            creditosEliminados: creditosAntes - db.creditos.length,
-            cuotasEliminadas: cuotasAntes - db.cuotas.length,
-            pagosEliminados: pagosAntes - db.pagos.length
+            creditosEliminados: db.creditos.filter((item) => item.adminID === admin && item.id === idCredito).length,
+            cuotasEliminadas: db.cuotas.filter((item) => item.adminID === admin && item.creditoId === idCredito).length,
+            pagosEliminados: db.pagos.filter((item) => item.adminID === admin && item.creditoId === idCredito).length
         };
     }
 
     // ELIMINAR CLIENTE: borra cliente y todo lo que cuelga de sus creditos.
-    function eliminarCliente(adminID, clienteId) {
+    async function eliminarCliente(adminID, clienteId) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const idCliente = texto(clienteId);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
 
         const cliente = db.clientes.find(
             (item) => item.adminID === admin && item.id === idCliente
@@ -743,32 +1042,58 @@
             .filter((credito) => credito.adminID === admin && credito.clienteId === idCliente)
             .map((credito) => credito.id);
 
-        const clientesAntes = db.clientes.length;
-        const creditosAntes = db.creditos.length;
-        const cuotasAntes = db.cuotas.length;
-        const pagosAntes = db.pagos.length;
+        const supabase = getSupabaseClient();
 
-        db.clientes = db.clientes.filter(
-            (item) => !(item.adminID === admin && item.id === idCliente)
-        );
-        db.creditos = db.creditos.filter(
-            (credito) => !(credito.adminID === admin && credito.clienteId === idCliente)
-        );
-        db.cuotas = db.cuotas.filter(
-            (cuota) => !(cuota.adminID === admin && creditosClienteIds.includes(cuota.creditoId))
-        );
-        db.pagos = db.pagos.filter(
-            (pago) => !(pago.adminID === admin && creditosClienteIds.includes(pago.creditoId))
-        );
+        if (creditosClienteIds.length) {
+            const { error: errorPagos } = await supabase
+                .from("pagos")
+                .delete()
+                .eq("admin_id", admin)
+                .in("credito_id", creditosClienteIds);
 
-        guardarDB(db);
+            if (errorPagos) {
+                throw new Error(describirErrorSupabase(errorPagos, "No se pudieron eliminar los pagos"));
+            }
+
+            const { error: errorCuotas } = await supabase
+                .from("cuotas")
+                .delete()
+                .eq("admin_id", admin)
+                .in("credito_id", creditosClienteIds);
+
+            if (errorCuotas) {
+                throw new Error(describirErrorSupabase(errorCuotas, "No se pudieron eliminar las cuotas"));
+            }
+
+            const { error: errorCreditos } = await supabase
+                .from("creditos")
+                .delete()
+                .eq("admin_id", admin)
+                .in("id", creditosClienteIds);
+
+            if (errorCreditos) {
+                throw new Error(describirErrorSupabase(errorCreditos, "No se pudieron eliminar los creditos"));
+            }
+        }
+
+        const { error: errorCliente } = await supabase
+            .from("clientes")
+            .delete()
+            .eq("admin_id", admin)
+            .eq("id", idCliente);
+
+        if (errorCliente) {
+            throw new Error(describirErrorSupabase(errorCliente, "No se pudo eliminar el cliente"));
+        }
+
+        invalidateCache(admin);
 
         return {
             clienteId: idCliente,
-            clientesEliminados: clientesAntes - db.clientes.length,
-            creditosEliminados: creditosAntes - db.creditos.length,
-            cuotasEliminadas: cuotasAntes - db.cuotas.length,
-            pagosEliminados: pagosAntes - db.pagos.length
+            clientesEliminados: db.clientes.filter((item) => item.adminID === admin && item.id === idCliente).length,
+            creditosEliminados: db.creditos.filter((item) => item.adminID === admin && item.clienteId === idCliente).length,
+            cuotasEliminadas: db.cuotas.filter((item) => item.adminID === admin && creditosClienteIds.includes(item.creditoId)).length,
+            pagosEliminados: db.pagos.filter((item) => item.adminID === admin && creditosClienteIds.includes(item.creditoId)).length
         };
     }
 
@@ -778,8 +1103,8 @@
 // LOGICA DE INTERACCION CON EL DOM
 // -----------------------------------------------------------------------------
 
-    function listarCreditosPorDni(adminID, dni) {
-        const db = cargarDB();
+    async function listarCreditosPorDni(adminID, dni) {
+        const db = await cargarDB(adminID);
         const cliente = buscarClientePorDNI(db, texto(adminID || ADMIN_ID_DEFAULT), dni);
         if (!cliente) return [];
 
@@ -788,10 +1113,10 @@
         );
     }
 
-    function obtenerProximaCuotaPendiente(adminID, creditoId) {
+    async function obtenerProximaCuotaPendiente(adminID, creditoId) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
         const idCredito = texto(creditoId);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
 
         const cuotasPendientes = db.cuotas
             .filter((cuota) => cuota.adminID === admin && cuota.creditoId === idCredito)
@@ -968,12 +1293,15 @@
     }
 
     // Devuelve clientes ya enriquecidos con resumenes de sus creditos.
-    function obtenerClientesConResumen(adminID) {
+    async function obtenerClientesConResumen(adminID) {
         const admin = texto(adminID || ADMIN_ID_DEFAULT);
-        const db = cargarDB();
+        const db = await cargarDB(admin);
 
         let huboAjustesPorRedondeo = false;
         let huboAjustesFechas = false;
+        const cuotasAjustadas = [];
+        const creditosAjustados = [];
+
         db.cuotas.forEach((cuota) => {
             if (cuota.adminID !== admin) return;
 
@@ -981,12 +1309,9 @@
                 cuota.saldoPendiente = 0;
                 cuota.estado = ESTADOS_CUOTA.PAGA;
                 huboAjustesPorRedondeo = true;
+                cuotasAjustadas.push(cuota);
             }
         });
-
-        if (huboAjustesPorRedondeo) {
-            guardarDB(db);
-        }
 
         db.creditos.forEach((credito) => {
             if (credito.adminID !== admin) return;
@@ -1000,17 +1325,42 @@
                 credito.fechaInicio = nuevaFechaInicio;
                 credito.fechaFin = sumarDiasCobro(nuevaFechaInicio, Number(credito.cantidadCuotas || 1) - 1);
 
+                creditosAjustados.push(credito);
+
                 db.cuotas.forEach((cuota) => {
                     if (cuota.adminID !== admin || cuota.creditoId !== credito.id) return;
                     cuota.fechaVencimiento = sumarDiasCobro(credito.fechaInicio, Number(cuota.numero || 1) - 1);
+                    cuotasAjustadas.push(cuota);
                 });
 
                 huboAjustesFechas = true;
             }
         });
 
-        if (huboAjustesFechas) {
-            guardarDB(db);
+        if (huboAjustesPorRedondeo || huboAjustesFechas) {
+            const supabase = getSupabaseClient();
+
+            if (cuotasAjustadas.length) {
+                const { error: errorCuotas } = await supabase
+                    .from("cuotas")
+                    .upsert(cuotasAjustadas.map(mapCuotaToDb), { onConflict: "id" });
+
+                if (errorCuotas) {
+                    throw new Error(describirErrorSupabase(errorCuotas, "No se pudieron ajustar las cuotas"));
+                }
+            }
+
+            if (creditosAjustados.length) {
+                const { error: errorCreditos } = await supabase
+                    .from("creditos")
+                    .upsert(creditosAjustados.map(mapCreditoToDb), { onConflict: "id" });
+
+                if (errorCreditos) {
+                    throw new Error(describirErrorSupabase(errorCreditos, "No se pudieron ajustar los creditos"));
+                }
+            }
+
+            setCache(admin, db);
         }
 
         return db.clientes
@@ -1034,8 +1384,8 @@
     }
 
     // Filtro textual simple por nombre/apellido.
-    function buscarClientesPorNombre(adminID, textoBusqueda) {
-        const clientes = obtenerClientesConResumen(adminID);
+    async function buscarClientesPorNombre(adminID, textoBusqueda) {
+        const clientes = await obtenerClientesConResumen(adminID);
         const filtro = texto(textoBusqueda).toLowerCase();
         if (!filtro) return clientes;
 

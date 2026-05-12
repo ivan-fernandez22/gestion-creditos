@@ -27,12 +27,12 @@
         <div class="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 shadow-sm">
             <form id="form-login" class="space-y-5">
                 <div>
-                    <label class="block text-[14px] uppercase font-bold text-slate-500 mb-2 ml-1">Usuario</label>
+                    <label class="block text-[14px] uppercase font-bold text-slate-500 mb-2 ml-1">Email</label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400">
                             <i data-lucide="user" class="w-5 h-5"></i>
                         </span>
-                        <input type="text" id="user" placeholder="Nombre de usuario" class="w-full pl-11 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-oro/50 transition-all" required>
+                        <input type="email" id="user" placeholder="correo@ejemplo.com" class="w-full pl-11 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-oro/50 transition-all" required>
                     </div>
                 </div>
 
@@ -61,6 +61,8 @@
     <script>
         lucide.createIcons();
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./js/supabaseClient.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./js/auth.js"></script>
     <script src="./js/login.js"></script>

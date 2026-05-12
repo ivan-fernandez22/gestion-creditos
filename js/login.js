@@ -5,72 +5,81 @@
         throw new Error("auth.js debe cargarse antes que login.js");
     }
 
-    const USUARIOS = [
-        {
-            usuario: "amigo",
-            clave: "oro123",
-            adminId: "admin-amigo",
-            nombre: "Amigo"
-        },
-        {
-            usuario: "socio",
-            clave: "plata456",
-            adminId: "admin-socio",
-            nombre: "Socio"
-        }
-    ];
+    const supabase = window.SupabaseClient || null;
 
     const form = document.getElementById("form-login");
     const inputUser = document.getElementById("user");
     const inputPass = document.getElementById("pass");
 
-    function avisarCredencialesIncorrectas() {
+    function avisarErrorLogin(mensaje) {
         if (window.Swal && typeof window.Swal.fire === "function") {
             window.Swal.fire({
                 icon: "error",
                 title: "Acceso denegado",
-                text: "Las credenciales ingresadas no son correctas. Revisa usuario y contraseña.",
+                text: mensaje || "No se pudo iniciar sesion. Revisa email y contrasena.",
                 confirmButtonText: "Entendido",
                 confirmButtonColor: "#c5a043"
             });
             return;
         }
 
-        alert("Las credenciales ingresadas no son correctas. Revisa usuario y contraseña.");
+        alert(mensaje || "No se pudo iniciar sesion. Revisa email y contrasena.");
     }
 
-    const sesionActual = window.Auth.obtenerSesion();
-    if (sesionActual) {
-        window.location.href = "main.html";
-        return;
-    }
+    async function inicializarLogin() {
+        const sesionActual = await window.Auth.obtenerSesion();
+        if (sesionActual) {
+            window.location.href = "main.html";
+            return;
+        }
 
-    if (!form || !inputUser || !inputPass) return;
+        if (!form || !inputUser || !inputPass) return;
 
-    form.addEventListener("submit", (event) => {
+        form.addEventListener("submit", async (event) => {
         event.preventDefault();
 
-        const usuarioIngresado = String(inputUser.value || "").trim().toLowerCase();
-        const claveIngresada = String(inputPass.value || "");
+        if (!supabase) {
+            avisarErrorLogin("Supabase no esta configurado. Revisa js/supabaseClient.js.");
+            return;
+        }
 
-        const usuario = USUARIOS.find(
-            (item) => item.usuario === usuarioIngresado && item.clave === claveIngresada
-        );
+        const email = String(inputUser.value || "").trim().toLowerCase();
+        const password = String(inputPass.value || "");
 
-        if (!usuario) {
-            avisarCredencialesIncorrectas();
+        if (!email || !password) {
+            avisarErrorLogin("Completa email y contrasena para continuar.");
+            return;
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error || !data || !data.user) {
+            const mensaje = error && error.message ? error.message : "Credenciales invalidas o usuario no confirmado.";
+            avisarErrorLogin(mensaje);
             inputPass.value = "";
             inputPass.focus();
             return;
         }
 
+        const user = data.user;
+
         window.Auth.guardarSesion({
-            adminId: usuario.adminId,
-            usuario: usuario.usuario,
-            nombre: usuario.nombre,
+            adminId: user.id,
+            usuario: user.email || email,
+            nombre: (user.user_metadata && user.user_metadata.nombre) || user.email || email,
             fechaLogin: new Date().toISOString()
         });
 
-        window.location.href = "main.html";
-    });
+            window.location.href = "main.html";
+        });
+
+        window.Auth.iniciarVigilanciaSesion(() => {
+            if (inputPass) inputPass.value = "";
+        });
+    }
+
+    inicializarLogin();
 })();
