@@ -393,13 +393,19 @@
         };
 
         window.addEventListener("afterprint", limpiar);
-        window.print();
 
-        setTimeout(() => {
-            if (document.body.dataset.print) {
-                limpiar();
-            }
-        }, 1000);
+        // Esperar a que el DOM se actualice completamente en mobile/desktop
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                window.print();
+
+                setTimeout(() => {
+                    if (document.body.dataset.print) {
+                        limpiar();
+                    }
+                }, 1000);
+            }, 300);
+        });
     }
 
     async function abrirDesglose(creditoId) {
