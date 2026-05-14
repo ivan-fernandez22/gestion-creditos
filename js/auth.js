@@ -49,10 +49,10 @@
         return null;
     }
 
-    function cerrarSesion() {
+    async function cerrarSesion() {
         const supabase = window.SupabaseClient;
         if (supabase && supabase.auth && typeof supabase.auth.signOut === "function") {
-            supabase.auth.signOut().catch(() => null);
+            await supabase.auth.signOut().catch(() => null);
         }
         localStorage.removeItem(SESSION_KEY);
     }

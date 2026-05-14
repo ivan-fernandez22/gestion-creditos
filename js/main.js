@@ -1031,7 +1031,7 @@
 
                 if (!confirmado) return;
 
-                window.Auth.cerrarSesion();
+                await window.Auth.cerrarSesion();
                 window.location.href = "login.html";
             });
         }
