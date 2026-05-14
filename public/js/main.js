@@ -416,7 +416,7 @@
 
         creditoDesgloseActualId = creditoId;
 
-        const clientes = await window.Logic.obtenerClientesConResumen(ADMIN_ID_ACTUAL);
+        const clientes = await window.Logic.obtenerClientesConResumen(ADMIN_ID_ACTUAL, { forceRefresh: true });
         let creditoEncontrado = null;
         let clienteEncontrado = null;
 

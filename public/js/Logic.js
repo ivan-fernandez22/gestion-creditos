@@ -346,6 +346,39 @@
         };
     }
 
+    function recalcularCuotasDesdePagos(db) {
+        const hoyISO = fechaActualISO().slice(0, 10);
+        const pagosPorCuota = new Map();
+
+        (db.pagos || []).forEach((pago) => {
+            if (!pago.cuotaId) return;
+            const acumulado = pagosPorCuota.get(pago.cuotaId) || [];
+            acumulado.push(pago);
+            pagosPorCuota.set(pago.cuotaId, acumulado);
+        });
+
+        (db.cuotas || []).forEach((cuota) => {
+            const pagos = pagosPorCuota.get(cuota.id) || [];
+            const montoPagado = redondearMoneda(pagos.reduce((total, pago) => total + numero(pago.monto), 0));
+            const saldoPendiente = redondearMoneda(numero(cuota.montoEsperado) - montoPagado);
+
+            cuota.montoPagado = montoPagado;
+            cuota.saldoPendiente = saldoPendiente > 0 ? saldoPendiente : 0;
+
+            if (cuota.saldoPendiente === 0) {
+                cuota.estado = ESTADOS_CUOTA.PAGA;
+                return;
+            }
+
+            if (cuota.fechaVencimiento && cuota.fechaVencimiento < hoyISO) {
+                cuota.estado = ESTADOS_CUOTA.VENCIDA;
+                return;
+            }
+
+            cuota.estado = montoPagado > 0 ? ESTADOS_CUOTA.PARCIAL : ESTADOS_CUOTA.PENDIENTE;
+        });
+    }
+
     function mapClienteToDb(cliente) {
         return {
             id: cliente.id,
@@ -410,10 +443,11 @@
         };
     }
 
-    async function cargarDB(adminID) {
+    async function cargarDB(adminID, opciones = {}) {
         const admin = validarAdminId(adminID);
+        const forzarRecarga = Boolean(opciones && opciones.forceRefresh);
 
-        if (cacheData && cacheAdminId === admin && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
+        if (!forzarRecarga && cacheData && cacheAdminId === admin && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
             return cacheData;
         }
 
@@ -445,6 +479,8 @@
             cuotas: (cuotasRes.data || []).map(mapCuotaFromDb),
             pagos: (pagosRes.data || []).map(mapPagoFromDb)
         };
+
+        recalcularCuotasDesdePagos(data);
 
         setCache(admin, data);
         return data;
@@ -1110,7 +1146,7 @@
 
     async function listarCreditosPorDni(adminID, dni) {
         const admin = validarAdminId(adminID);
-        const db = await cargarDB(admin);
+        const db = await cargarDB(admin, { forceRefresh: true });
         const cliente = buscarClientePorDNI(db, admin, dni);
         if (!cliente) return [];
 
@@ -1122,7 +1158,7 @@
     async function obtenerProximaCuotaPendiente(adminID, creditoId) {
         const admin = validarAdminId(adminID);
         const idCredito = texto(creditoId);
-        const db = await cargarDB(admin);
+        const db = await cargarDB(admin, { forceRefresh: true });
 
         const cuotasPendientes = db.cuotas
             .filter((cuota) => cuota.adminID === admin && cuota.creditoId === idCredito)
@@ -1299,9 +1335,9 @@
     }
 
     // Devuelve clientes ya enriquecidos con resumenes de sus creditos.
-    async function obtenerClientesConResumen(adminID) {
+    async function obtenerClientesConResumen(adminID, opciones = {}) {
         const admin = validarAdminId(adminID);
-        const db = await cargarDB(admin);
+        const db = await cargarDB(admin, opciones);
 
         let huboAjustesPorRedondeo = false;
         let huboAjustesFechas = false;
@@ -1391,7 +1427,7 @@
 
     // Filtro textual simple por nombre/apellido.
     async function buscarClientesPorNombre(adminID, textoBusqueda) {
-        const clientes = await obtenerClientesConResumen(adminID);
+        const clientes = await obtenerClientesConResumen(adminID, { forceRefresh: true });
         const filtro = texto(textoBusqueda).toLowerCase();
         if (!filtro) return clientes;
 
