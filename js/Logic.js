@@ -7,7 +7,7 @@
         throw new Error("Datos.js debe cargarse antes que Logic.js");
     }
 
-    const { SCHEMA_VERSION, STORAGE_KEY, ADMIN_ID_DEFAULT } = window.Datos;
+    const { SCHEMA_VERSION, STORAGE_KEY } = window.Datos;
 
     const PLANES_CREDITO = {
         12: { cuotas: 12, multiplicador: 1.2 },
@@ -61,6 +61,12 @@
 
     function texto(valor) {
         return String(valor || "").trim();
+    }
+
+    function validarAdminId(adminID) {
+        const admin = texto(adminID);
+        if (!admin) throw new Error("Sesion invalida. Inicia sesion nuevamente.");
+        return admin;
     }
 
     function numero(valor) {
@@ -405,8 +411,7 @@
     }
 
     async function cargarDB(adminID) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
-        if (!admin) return crearDBVacia();
+        const admin = validarAdminId(adminID);
 
         if (cacheData && cacheAdminId === admin && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
             return cacheData;
@@ -472,7 +477,7 @@
     }
 
     async function listarCreditosPorNombreApellido(adminID, nombre, apellido) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const db = await cargarDB(admin);
         const coincidencias = buscarClientesPorNombreApellido(db, admin, nombre, apellido);
 
@@ -517,7 +522,7 @@
     }
 
     async function listarCreditosPorClienteId(adminID, clienteId) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const id = texto(clienteId);
         const db = await cargarDB(admin);
 
@@ -618,7 +623,7 @@
 
 // CREAR AL CLIENTE: valida que el DNI no exista para el mismo adminID.
     async function crearCliente(payload) {
-        const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
+        const adminID = validarAdminId(payload.adminID);
         const dni = normalizarDNI(payload.dni);
         const nombre = texto(payload.nombre);
         const apellido = texto(payload.apellido);
@@ -672,7 +677,7 @@
     }
 
     async function actualizarCliente(adminID, clienteId, cambios) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const id = texto(clienteId);
 
         if (!id) throw new Error("No existe el cliente seleccionado para editar.");
@@ -750,7 +755,7 @@
 
 // CREAR AL CREDITO: valida que el cliente exista y calcula montos y cuotas.
     async function crearCredito(payload) {
-        const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
+        const adminID = validarAdminId(payload.adminID);
         const plan = numero(payload.plan);
         const montoSolicitado = redondearMoneda(payload.montoSolicitado);
         const nombreCredito = texto(payload.nombre);
@@ -840,7 +845,7 @@
     }
 
     async function actualizarCredito(adminID, creditoId, cambios) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const id = texto(creditoId);
 
         if (!id) throw new Error("No existe el crédito seleccionado para editar.");
@@ -870,7 +875,7 @@
 
 // REGISTRAR PAGO: valida que exista el cliente, credito y cuota. Actualiza montos y estados.
     async function registrarPago(payload) {
-        const adminID = texto(payload.adminID || ADMIN_ID_DEFAULT);
+        const adminID = validarAdminId(payload.adminID);
         const db = await cargarDB(adminID);
 
         if (!texto(payload.creditoId)) throw new Error("Debes seleccionar un crédito para registrar el pago.");
@@ -973,7 +978,7 @@
 
     // ELIMINAR CREDITO: borra el credito y sus cuotas/pagos asociados.
     async function eliminarCredito(adminID, creditoId) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const idCredito = texto(creditoId);
         const db = await cargarDB(admin);
 
@@ -1027,7 +1032,7 @@
 
     // ELIMINAR CLIENTE: borra cliente y todo lo que cuelga de sus creditos.
     async function eliminarCliente(adminID, clienteId) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const idCliente = texto(clienteId);
         const db = await cargarDB(admin);
 
@@ -1104,8 +1109,9 @@
 // -----------------------------------------------------------------------------
 
     async function listarCreditosPorDni(adminID, dni) {
-        const db = await cargarDB(adminID);
-        const cliente = buscarClientePorDNI(db, texto(adminID || ADMIN_ID_DEFAULT), dni);
+        const admin = validarAdminId(adminID);
+        const db = await cargarDB(admin);
+        const cliente = buscarClientePorDNI(db, admin, dni);
         if (!cliente) return [];
 
         return db.creditos.filter(
@@ -1114,7 +1120,7 @@
     }
 
     async function obtenerProximaCuotaPendiente(adminID, creditoId) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const idCredito = texto(creditoId);
         const db = await cargarDB(admin);
 
@@ -1294,7 +1300,7 @@
 
     // Devuelve clientes ya enriquecidos con resumenes de sus creditos.
     async function obtenerClientesConResumen(adminID) {
-        const admin = texto(adminID || ADMIN_ID_DEFAULT);
+        const admin = validarAdminId(adminID);
         const db = await cargarDB(admin);
 
         let huboAjustesPorRedondeo = false;

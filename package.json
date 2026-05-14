@@ -1,0 +1,13 @@
+{
+  "name": "automatizacion-cobranzas",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i ./src/tailwind.css -o ./dist/tailwind.css --minify",
+    "build": "npm run build:css",
+    "dev": "tailwindcss -c tailwind.config.js -i ./src/tailwind.css -o ./dist/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.10"
+  }
+}

@@ -33,16 +33,20 @@
 
     async function obtenerSesion() {
         const supabase = window.SupabaseClient;
-        if (supabase && supabase.auth && typeof supabase.auth.getSession === "function") {
-            const { data, error } = await supabase.auth.getSession();
-            if (!error && data && data.session && data.session.user) {
-                const sesion = mapearUsuarioSupabase(data.session.user);
-                guardarSesion(sesion);
-                return sesion;
-            }
+        if (!supabase || !supabase.auth || typeof supabase.auth.getSession !== "function") {
+            limpiarSesionLocal();
+            return null;
         }
 
-        return obtenerSesionLocal();
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data && data.session && data.session.user) {
+            const sesion = mapearUsuarioSupabase(data.session.user);
+            guardarSesion(sesion);
+            return sesion;
+        }
+
+        limpiarSesionLocal();
+        return null;
     }
 
     function cerrarSesion() {

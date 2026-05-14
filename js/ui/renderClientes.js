@@ -57,6 +57,7 @@
         const cuotas = Array.isArray(credito?.cuotas) ? credito.cuotas : [];
         const hayVencidas = cuotas.some((cuota) => {
             if (!cuota.fechaVencimiento) return false;
+            if (cuota.estado === "parcial") return false;
             return cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0;
         });
         const faltaPagoEnFecha = false;
@@ -206,57 +207,64 @@
                 const estadoVisualCredito = obtenerEstadoVisualCredito(credito);
 
                 return `
-                    <div class="relative rounded-3xl border p-5 group transition-all ${claseTarjetaCredito(estadoVisualCredito)}">
-                        <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
-                            <button data-action="editar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-slate-500 hover:text-slate-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Editar crédito">
-                                <i data-lucide="pencil" class="w-5 h-5"></i>
-                            </button>
-                            <button data-action="eliminar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-rose-500 hover:text-rose-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Eliminar crédito">
-                                <i data-lucide="trash-2" class="w-5 h-5"></i>
-                            </button>
-                            <button data-action="ver-desglose" data-credito-id="${credito.id}" data-cliente-id="${credito.clienteId}" class="p-2 bg-white text-slate-600 hover:text-oro rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Ver desglose">
-                                <i data-lucide="eye" class="w-5 h-5"></i>
-                            </button>
+                    <div class="rounded-3xl border p-5 group transition-all credito-card ${claseTarjetaCredito(estadoVisualCredito)}">
+                        <div class="flex items-center justify-between gap-2 credito-buttons mb-4 pb-4 border-b border-slate-100">
+                            <div></div>
+                            <div class="flex items-center gap-2">
+                                <button data-action="editar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-slate-500 hover:text-slate-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Editar crédito">
+                                    <i data-lucide="pencil" class="w-5 h-5"></i>
+                                </button>
+                                <button data-action="eliminar-credito" data-credito-id="${credito.id}" data-credito-nombre="${credito.nombre}" class="p-2 bg-white text-rose-500 hover:text-rose-700 rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Eliminar crédito">
+                                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                </button>
+                                <button data-action="ver-desglose" data-credito-id="${credito.id}" data-cliente-id="${credito.clienteId}" class="p-2 bg-white text-slate-600 hover:text-oro rounded-xl shadow-sm border border-slate-100 transition-all active:scale-90" title="Ver desglose">
+                                    <i data-lucide="eye" class="w-5 h-5"></i>
+                                </button>
+                            </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="space-y-3">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nombre del Préstamo</p>
-                                    <p class="text-sm font-bold text-slate-700 italic">"${credito.nombre}"</p>
-                                </div>
-                                <div class="grid grid-cols-2 gap-4">
+                        <div class="credito-top">
+                            <div class="credito-top-left">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre del Préstamo</p>
+                                <p class="text-lg font-black text-slate-800 italic mb-3">"${credito.nombre}"</p>
+                                <div class="flex flex-wrap gap-4">
                                     <div>
                                         <p class="text-[10px] font-bold text-slate-500 uppercase">Pidió</p>
                                         <p class="text-base font-black text-slate-700">${formatearMoneda(credito.montoSolicitado)}</p>
                                     </div>
                                     <div>
-                                        <p class="text-[10px] font-bold text-slate-500 uppercase text-oro">Devuelve</p>
+                                        <p class="text-[10px] font-bold text-oro uppercase">Devuelve</p>
                                         <p class="text-base font-black text-oro">${formatearMoneda(credito.montoTotal)}</p>
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="space-y-3 border-y md:border-y-0 md:border-x border-slate-200 py-4 md:py-0 md:px-6">
-                                <div class="flex justify-between items-start">
+                            <div class="credito-top-right">
+                                <div class="flex flex-wrap gap-4 mb-3">
                                     <div>
-                                        <p class="text-[12px] font-bold text-slate-500 uppercase italic">Plan ${credito.plan} días (${credito.tasaInteres}%)</p>
-                                        <p class="text-[12px] font-bold text-slate-500 uppercase mt-1">Valor Cuota: <span class="text-slate-700 font-black">${formatearMoneda(credito.valorCuota)}</span></p>
+                                        <p class="text-[10px] font-bold text-slate-500 uppercase">Plan</p>
+                                        <p class="text-sm font-bold text-slate-700">${credito.plan} días (${credito.tasaInteres}%)</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-500 uppercase">Cuota</p>
+                                        <p class="text-sm font-bold text-slate-700">${formatearMoneda(credito.valorCuota)}</p>
                                     </div>
                                 </div>
-
-                                <div class="flex justify-between gap-2 border-t border-slate-100 pt-2">
+                                <div class="flex gap-6">
                                     <div>
-                                        <p class="text-[10px] font-bold text-slate-500 uppercase">Inicio</p>
-                                        <p class="text-[12px] font-bold text-slate-700">${credito.fechaInicio || "-"}</p>
+                                        <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Inicio</p>
+                                        <p class="text-sm font-black text-oro">${credito.fechaInicio || "-"}</p>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="text-[10px] font-bold text-slate-500 uppercase">Fin</p>
-                                        <p class="text-[12px] font-bold text-emerald-800">${credito.fechaFin || "-"}</p>
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Fin</p>
+                                        <p class="text-sm font-black text-emerald-600">${credito.fechaFin || "-"}</p>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <div class="pt-1">
+                        <div class="credito-body credito-grid">
+                            <div class="space-y-3">
+                                <div>
                                     <div class="flex justify-between text-[11px] font-bold uppercase mb-1">
                                         <span class="text-emerald-600">Pagas: ${credito.pagas}</span>
                                         <span class="text-rose-500">Impagas: ${credito.impagas}</span>
@@ -315,11 +323,11 @@
 
                                 <div class="border-t border-slate-100 pt-2">
                                     <p class="text-[10px] font-bold text-slate-500 uppercase mb-2">Historial semanal</p>
-                                    <div class="max-h-32 overflow-y-auto pr-1 space-y-1">
+                                    <div class="max-h-32 overflow-y-auto pr-1 space-y-1 historial-semanal">
                                         ${historialSemanal
                                             .map(
                                                 (semana) => `
-                                                    <div class="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2 py-1">
+                                                    <div class="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 historial-item">
                                                         <div class="flex justify-between items-center text-slate-600 font-semibold">
                                                             <span>Sem ${semana.semana}</span>
                                                             <span>${formatearMoneda(semana.recaudado)}</span>
@@ -428,8 +436,8 @@
                 const estadoVisual = obtenerEstadoVisualCliente(cliente.creditos);
 
                 return `
-                    <div class="p-6 rounded-[2.5rem] border shadow-sm ${estadoVisual === "urgente" ? "bg-rose-50 border-rose-200" : "bg-white border-slate-200"}">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                    <div class="p-6 rounded-[2.5rem] border shadow-sm cliente-card ${estadoVisual === "urgente" ? "bg-rose-50 border-rose-200" : "bg-white border-slate-200"}">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-100 cliente-header">
                             <div>
                                 <div class="flex items-center gap-3">
                                     <h3 class="text-xl font-bold text-slate-800">${cliente.nombre} ${cliente.apellido}</h3>
@@ -457,12 +465,12 @@
                         <div class="space-y-4">
                             <div class="flex items-center justify-between">
                                 <h4 class="text-[14px] uppercase font-black text-slate-500 tracking-widest">Créditos Asociados</h4>
-                                <button type="button" data-action="toggle-creditos" data-target="creditos-${cliente.id}" class="inline-flex items-center gap-1 text-xs font-bold bg-slate-300 text-slate-800 hover:bg-slate-300 px-2.5 py-1.5 rounded-full">
+                                <button type="button" data-action="toggle-creditos" data-target="creditos-${cliente.id}" class="btn-toggle-creditos inline-flex items-center gap-1 text-xs font-bold bg-slate-300 text-slate-800 hover:bg-slate-300 px-2.5 py-1.5 rounded-full whitespace-nowrap">
                                     <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform"></i>
                                     <span class="js-toggle-text">Ver mas</span>
                                 </button>
                             </div>
-                            <div id="creditos-${cliente.id}" class="hidden space-y-6">
+                            <div id="creditos-${cliente.id}" class="hidden space-y-6 creditos-grid">
                                 ${renderCreditos(cliente.creditos)}
                             </div>
                         </div>

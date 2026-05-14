@@ -299,6 +299,7 @@
         const cuotas = Array.isArray(credito?.cuotas) ? credito.cuotas : [];
         const hayVencidas = cuotas.some((cuota) => {
             if (!cuota.fechaVencimiento) return false;
+            if (cuota.estado === "parcial") return false;
             return cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0;
         });
         const faltaPagoEnFecha = false;

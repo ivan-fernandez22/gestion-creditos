@@ -65,7 +65,13 @@
                 chip: "bg-emerald-500 text-white shadow-emerald-200"
             };
         }
-        if (estado === "parcial" || estado === "vencida") {
+        if (estado === "parcial") {
+            return {
+                contenedor: "cuota-parcial",
+                chip: "cuota-parcial-chip"
+            };
+        }
+        if (estado === "vencida") {
             return {
                 contenedor: "bg-rose-50 border border-rose-100",
                 chip: "bg-rose-500 text-white shadow-rose-200"
@@ -94,9 +100,12 @@
                     const day = String(hoy.getDate()).padStart(2, "0");
                     return `${year}-${month}-${day}`;
                 })();
-                const estado = cuota.fechaVencimiento && cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0
-                    ? "vencida"
-                    : cuota.estado || "pendiente";
+                const estadoBase = cuota.estado || "pendiente";
+                const estado = estadoBase === "parcial" || estadoBase === "paga"
+                    ? estadoBase
+                    : cuota.fechaVencimiento && cuota.fechaVencimiento < hoyISO && Number(cuota.saldoPendiente || 0) > 0
+                        ? "vencida"
+                        : estadoBase;
                 const clases = clasesCuota(estado);
                 const fechaProgramada = cuota.numero === 1 && fechaAltaISO && cuota.fechaVencimiento === fechaAltaISO
                     ? sumarDiaCobro(fechaAltaISO)
@@ -114,7 +123,9 @@
 
                 const tituloCuota = estado === "vencida"
                     ? "Cuota vencida"
-                    : cuota.titulo || "Cuota";
+                    : estado === "parcial"
+                        ? "Pago parcial"
+                        : cuota.titulo || "Cuota";
 
                 return `
                     <div class="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-3xl gap-4 ${clases.contenedor}">

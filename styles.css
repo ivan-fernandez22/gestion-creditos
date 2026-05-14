@@ -56,3 +56,322 @@
         display: none !important;
     }
 }
+
+/* Typography scale */
+body {
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+#app-principal h1 {
+    font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+}
+
+#app-principal h2 {
+    font-size: clamp(1.1rem, 1.8vw, 1.4rem);
+}
+
+#app-principal h3 {
+    font-size: clamp(1rem, 1.5vw, 1.2rem);
+}
+
+#app-principal .text-sm {
+    font-size: 0.875rem;
+}
+
+#app-principal .text-xs {
+    font-size: 0.75rem;
+}
+
+button,
+.btn-toggle-creditos,
+#app-principal button,
+#app-principal a.button {
+    font-size: 0.9rem;
+}
+
+#app-principal button,
+#app-principal a {
+    line-height: 1.2;
+}
+
+.credito-card {
+    font-size: 0.9rem;
+}
+
+.credito-card .text-sm {
+    font-size: 0.9rem;
+}
+
+.credito-card .text-xs,
+.credito-card .text-[10px],
+.credito-card .text-[11px] {
+    font-size: 0.78rem;
+}
+
+/* Form row base styles for all viewports */
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.span-2 {
+    grid-column: span 2;
+}
+
+.btn-toggle-creditos {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.rotate-180 {
+    transform: rotate(180deg);
+}
+
+/* Botones de crédito - no superpuestos */
+.credito-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+}
+
+.credito-buttons > :first-child {
+    flex: 1;
+}
+
+.credito-buttons > :last-child {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Clientes grid: 1 columna siempre */
+.clientes-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+}
+
+/* Créditos grid: 1 columna en mobile, 2 en tablet, 3 en desktop */
+.credito-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem !important;
+}
+
+.creditos-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.creditos-grid.hidden {
+    display: none !important;
+}
+
+.credito-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+    text-align: center;
+}
+
+.credito-top-left,
+.credito-top-right {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.credito-amounts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+}
+
+/* Cuotas parciales: estilos fijos (no dependen de Tailwind build) */
+.cuota-parcial {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+}
+
+.cuota-parcial-chip {
+    background: #facc15;
+    color: #78350f;
+    box-shadow: 0 10px 15px -3px rgba(250, 204, 21, 0.35);
+}
+
+@media (max-width: 640px) {
+    .credito-top {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1080px) {
+    body {
+        padding: 1.5rem !important;
+    }
+
+    #app-principal {
+        max-width: 1100px;
+    }
+
+    #app-principal header {
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    #app-principal .text-3xl {
+        font-size: 1.6rem !important;
+        line-height: 1.2;
+    }
+
+    #app-principal .text-2xl {
+        font-size: 1.35rem !important;
+        line-height: 1.2;
+    }
+
+    #app-principal .text-lg {
+        font-size: 1rem !important;
+        line-height: 1.2;
+    }
+
+    #app-principal .text-base {
+        font-size: 0.95rem !important;
+    }
+
+    .notebook-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 0.75rem !important;
+        margin-bottom: 2rem !important;
+    }
+
+    #app-principal .notebook-card {
+        padding: 1rem;
+        border-radius: 1.25rem;
+    }
+
+    #app-principal .notebook-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    #app-principal .notebook-form > * + * {
+        margin-top: 0 !important;
+    }
+
+    #app-principal .notebook-form input,
+    #app-principal .notebook-form select {
+        padding: 0.55rem 0.7rem;
+        font-size: 0.82rem;
+        border-radius: 0.75rem;
+    }
+
+    #app-principal .notebook-form label {
+        font-size: 0.6rem;
+        margin-left: 0.25rem;
+        margin-bottom: 0.25rem;
+    }
+
+    #app-principal .notebook-form button {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.82rem;
+        border-radius: 0.75rem;
+    }
+
+    #app-principal #contenedor-clientes {
+        gap: 1rem !important;
+    }
+
+    #app-principal .cliente-card {
+        padding: 1rem;
+        border-radius: 1.5rem;
+    }
+
+    #app-principal .cliente-header {
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+
+    #app-principal .cliente-card h3 {
+        font-size: 1rem;
+    }
+
+    #app-principal .cliente-card .text-sm {
+        font-size: 0.82rem;
+    }
+
+    #app-principal .cliente-card .text-xs {
+        font-size: 0.74rem;
+    }
+
+    #app-principal .credito-card {
+        font-size: 0.86rem;
+    }
+
+    #app-principal .credito-card .text-sm {
+        font-size: 0.86rem;
+    }
+
+    #app-principal .credito-card .text-xs,
+    #app-principal .credito-card .text-[10px],
+    #app-principal .credito-card .text-[11px] {
+        font-size: 0.74rem;
+    }
+
+    #app-principal button,
+    #app-principal .btn-toggle-creditos {
+        font-size: 0.8rem;
+    }
+
+    #app-principal .cliente-card .grid.mt-4 {
+        margin-top: 0.75rem;
+    }
+
+    #app-principal .creditos-grid {
+        gap: 0.75rem;
+    }
+
+    #app-principal .credito-card {
+        padding: 1rem;
+        border-radius: 1.25rem;
+    }
+
+    #app-principal .credito-card .credito-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+    }
+
+    #app-principal .credito-card .credito-buttons button {
+        padding: 0.4rem;
+        border-radius: 0.6rem;
+    }
+
+    #app-principal .credito-card .credito-grid {
+        gap: 0.75rem;
+    }
+
+    #app-principal .credito-card .space-y-3 {
+        margin-bottom: 0;
+    }
+
+    #app-principal .credito-card .max-h-32 {
+        max-height: 7rem;
+    }
+}

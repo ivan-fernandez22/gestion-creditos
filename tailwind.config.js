@@ -1,2 +1,12 @@
-// Este proyecto usa Tailwind por CDN en HTML.
-// Este archivo queda como placeholder por si luego migras a build local.
+module.exports = {
+	content: ["./main.html", "./login.html", "./js/**/*.js"],
+	theme: {
+		extend: {
+			colors: {
+				oro: "#c5a043",
+				"oro-hover": "#b48f32"
+			}
+		}
+	},
+	plugins: []
+};
